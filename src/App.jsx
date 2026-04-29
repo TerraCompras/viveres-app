@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import * as XLSX from "xlsx";
 import { supabase } from "./lib/supabase";
 
@@ -828,8 +828,7 @@ function ModalTrackerEditar({ pedido, onClose, onSave, notify }) {
   });
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const remitoRef = useRef ? null : null;
-  const fileInputRef = React?.createRef ? null : null;
+  // file input handled via document.getElementById
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
