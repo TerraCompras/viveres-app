@@ -61,6 +61,19 @@ const api = {
     await supabase.from("viveres_pedido_items").delete().eq("pedido_id", pedidoId);
     if (items?.length) await supabase.from("viveres_pedido_items").insert(items.map(it => ({ ...it, pedido_id: pedidoId })));
   },
+  async subirRemito(file, pedidoId) {
+    const path = `viveres/remitos/${pedidoId}/${Date.now()}_${file.name}`;
+    const { error } = await supabase.storage.from("cotizaciones").upload(path, file, { upsert: true });
+    if (error) throw error;
+    const { data } = supabase.storage.from("cotizaciones").getPublicUrl(path);
+    return data.publicUrl;
+  },
+};
+
+const TRACKER_STATUS_VIVERES = {
+  pendiente:  { label: "Pendiente",   color: "b-amber" },
+  en_camino:  { label: "En camino",   color: "b-blue" },
+  entregado:  { label: "Entregado",   color: "b-green" },
 };
 
 const CSS = `
@@ -171,6 +184,13 @@ tr.click:hover td{background:var(--surface2);cursor:pointer}
 .manual-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 20px;gap:16px;background:var(--surface2);border:2px dashed var(--border);border-radius:var(--r2);text-align:center}
 .manual-row{background:var(--surface);border:1px solid var(--border);border-radius:var(--r2);padding:14px 16px;margin-bottom:10px;position:relative}
 .manual-row:hover{border-color:var(--blue)}
+.fecha-chain{display:flex;gap:16px;align-items:stretch;flex-wrap:wrap;margin:12px 0}
+.fecha-step{display:flex;flex-direction:column;align-items:center;gap:4px;min-width:120px;padding:12px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--r2);flex:1}
+.fecha-step.done{background:#D1FAE5;border-color:#A7F3D0}
+.fecha-step-label{font-family:var(--mono);font-size:8px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted2);font-weight:700}
+.fecha-step-val{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--navy);text-align:center}
+.fecha-step.done .fecha-step-label{color:var(--accent2)}
+.fecha-step.done .fecha-step-val{color:var(--accent2)}
 `;
 
 function Notif({ msg, onClose }) {
@@ -632,7 +652,7 @@ function ModalRevisar({ pedido, onClose, onActualizado, notify }) {
 
   const handleAprobar = async () => {
     setSaving(true);
-    try { await api.actualizarPedido(pedido.id, { status: "aprobado" }); notify("Pedido aprobado", "success"); onActualizado(); }
+    try { await api.actualizarPedido(pedido.id, { status: "aprobado", fecha_aprobacion: new Date().toISOString(), tracker_status: "pendiente" }); notify("Pedido aprobado", "success"); onActualizado(); }
     finally { setSaving(false); }
   };
 
@@ -797,6 +817,271 @@ function PageHistorial({ onNuevo, notify }) {
   const [selected, setSelected] = useState(null);
 
   useEffect(() => { api.getPedidos().then(d => { setPedidos(d); setLoading(false); }); }, []);
+
+// ─── PAGE: TRACKER VÍVERES ────────────────────────────────────────────────────
+function ModalTrackerEditar({ pedido, onClose, onSave, notify }) {
+  const [form, setForm] = useState({
+    tracker_status: pedido.tracker_status || "pendiente",
+    nro_remito: pedido.nro_remito || "",
+    fecha_entrega: pedido.fecha_entrega ? pedido.fecha_entrega.slice(0, 10) : "",
+    tracker_notas: pedido.tracker_notas || "",
+  });
+  const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const remitoRef = useRef ? null : null;
+  const fileInputRef = React?.createRef ? null : null;
+
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  const handleUploadRemito = async (file) => {
+    setUploading(true);
+    try {
+      const url = await api.subirRemito(file, pedido.id);
+      const updated = await api.actualizarPedido(pedido.id, { remito_url: url, nro_remito: form.nro_remito || file.name });
+      notify("Remito adjuntado", "success");
+      onSave(updated);
+    } catch (e) { notify("Error al subir remito: " + e.message, "error"); }
+    finally { setUploading(false); }
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const cambios = {
+        tracker_status: form.tracker_status,
+        nro_remito: form.nro_remito || null,
+        tracker_notas: form.tracker_notas || null,
+        fecha_entrega: form.tracker_status === "entregado" && form.fecha_entrega ? new Date(form.fecha_entrega).toISOString() : (form.fecha_entrega ? new Date(form.fecha_entrega).toISOString() : null),
+      };
+      const updated = await api.actualizarPedido(pedido.id, cambios);
+      notify("Tracker actualizado", "success");
+      onSave(updated);
+    } finally { setSaving(false); }
+  };
+
+  const items = (pedido.viveres_pedido_items || []).filter(it => it.cantidad_pedida > 0);
+
+  return (
+    <div className="overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="modal">
+        <div className="mhdr">
+          <div>
+            <div className="mtitle">🚢 {pedido.base_buque} — Tracker Víveres</div>
+            <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 4 }}>
+              Parana Logística · {pedido.pax} PAX · {pedido.dias} días · {pedido.solicitado_por}
+            </div>
+          </div>
+          <button className="mclose" onClick={onClose}>✕</button>
+        </div>
+        <div className="mbody">
+          {/* Cadena de fechas */}
+          <div className="fecha-chain">
+            <div className={`fecha-step ${pedido.created_at ? "done" : "pending"}`}>
+              <div style={{ fontSize: 18 }}>📋</div>
+              <div className="fecha-step-label">Solicitud</div>
+              <div className="fecha-step-val">{pedido.created_at ? new Date(pedido.created_at).toLocaleDateString("es-AR") : "—"}</div>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", color: "var(--muted2)", fontSize: 18, flexShrink: 0 }}>→</div>
+            <div className={`fecha-step ${pedido.fecha_aprobacion ? "done" : "pending"}`}>
+              <div style={{ fontSize: 18 }}>✅</div>
+              <div className="fecha-step-label">Aprobación</div>
+              <div className="fecha-step-val">{pedido.fecha_aprobacion ? new Date(pedido.fecha_aprobacion).toLocaleDateString("es-AR") : "—"}</div>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", color: "var(--muted2)", fontSize: 18, flexShrink: 0 }}>→</div>
+            <div className={`fecha-step ${pedido.fecha_entrega ? "done" : "pending"}`}>
+              <div style={{ fontSize: 18 }}>📦</div>
+              <div className="fecha-step-label">Entrega</div>
+              <div className="fecha-step-val">{pedido.fecha_entrega ? new Date(pedido.fecha_entrega).toLocaleDateString("es-AR") : "—"}</div>
+            </div>
+          </div>
+
+          <div className="form-section">Estado del pedido</div>
+          <div className="form-grid">
+            <div className="fg">
+              <label>Estado</label>
+              <select value={form.tracker_status} onChange={e => set("tracker_status", e.target.value)}>
+                <option value="pendiente">Pendiente</option>
+                <option value="en_camino">En camino</option>
+                <option value="entregado">Entregado</option>
+              </select>
+            </div>
+            <div className="fg">
+              <label>Fecha de entrega</label>
+              <input type="date" value={form.fecha_entrega} onChange={e => set("fecha_entrega", e.target.value)} />
+            </div>
+          </div>
+
+          <div className="form-section">Remito</div>
+          <div className="form-grid">
+            <div className="fg">
+              <label>N° Remito</label>
+              <input value={form.nro_remito} onChange={e => set("nro_remito", e.target.value)} placeholder="Ej: 0001-00001234" />
+            </div>
+            <div className="fg">
+              <label>Remito firmado (PDF/imagen)</label>
+              {pedido.remito_url
+                ? <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                    <a href={pedido.remito_url} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: "var(--blue)" }}>📎 Ver remito adjunto</a>
+                  </div>
+                : <div>
+                    <input type="file" id={`remito-${pedido.id}`} accept=".pdf,.jpg,.jpeg,.png" style={{ display: "none" }}
+                      onChange={e => handleUploadRemito(e.target.files[0])} />
+                    <button className="btn btn-ghost btn-sm" onClick={() => document.getElementById(`remito-${pedido.id}`).click()} disabled={uploading}>
+                      {uploading ? "⏳ Subiendo..." : "📎 Adjuntar remito"}
+                    </button>
+                  </div>
+              }
+            </div>
+          </div>
+
+          <div className="fg" style={{ marginTop: 12 }}>
+            <label>Notas</label>
+            <textarea value={form.tracker_notas} onChange={e => set("tracker_notas", e.target.value)} placeholder="Observaciones sobre la entrega..." style={{ minHeight: 60 }} />
+          </div>
+
+          {items.length > 0 && <>
+            <div className="form-section">Ítems del pedido</div>
+            <div className="table-wrap">
+              <table>
+                <thead><tr><th>Categoría</th><th>Descripción</th><th>Cant.</th><th>Unidad</th></tr></thead>
+                <tbody>
+                  {items.map((it, i) => (
+                    <tr key={i}>
+                      <td style={{ fontSize: 11, color: "var(--muted)" }}>{it.categoria}</td>
+                      <td style={{ fontWeight: 500, fontSize: 12 }}>{it.descripcion}</td>
+                      <td className="text-mono" style={{ fontWeight: 700, color: "var(--accent2)" }}>{it.cantidad_pedida}</td>
+                      <td style={{ fontSize: 11, color: "var(--muted)" }}>{it.unidad}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>}
+        </div>
+        <div className="mftr">
+          <button className="btn btn-ghost" onClick={onClose}>Cancelar</button>
+          <button className="btn btn-primary" onClick={handleSave} disabled={saving}>{saving ? "Guardando..." : "Guardar"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PageTracker({ notify }) {
+  const [pedidos, setPedidos] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [selected, setSelected] = useState(null);
+  const [filtroStatus, setFiltroStatus] = useState("");
+  const [filtroBase, setFiltroBase] = useState("");
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try { setPedidos(await api.getPedidos({ statuses: ["aprobado", "enviado"] })); }
+    finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const filtrados = pedidos.filter(p => {
+    if (filtroStatus && (p.tracker_status || "pendiente") !== filtroStatus) return false;
+    if (filtroBase && p.base_buque !== filtroBase) return false;
+    return true;
+  });
+
+  const bases = [...new Set(pedidos.map(p => p.base_buque).filter(Boolean))].sort();
+
+  const statusColor = { pendiente: "b-amber", en_camino: "b-blue", entregado: "b-green" };
+  const statusLabel = { pendiente: "Pendiente", en_camino: "En camino", entregado: "Entregado" };
+
+  const stats = {
+    total: pedidos.length,
+    pendiente: pedidos.filter(p => !p.tracker_status || p.tracker_status === "pendiente").length,
+    en_camino: pedidos.filter(p => p.tracker_status === "en_camino").length,
+    entregado: pedidos.filter(p => p.tracker_status === "entregado").length,
+  };
+
+  return (
+    <div>
+      {/* Stats */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 18 }}>
+        {[
+          { label: "Total", val: stats.total, color: "var(--blue)" },
+          { label: "Pendientes", val: stats.pendiente, color: "var(--warn)" },
+          { label: "En camino", val: stats.en_camino, color: "var(--blue)" },
+          { label: "Entregados", val: stats.entregado, color: "var(--accent2)" },
+        ].map(s => (
+          <div key={s.label} className="card" style={{ margin: 0, padding: "14px 18px" }}>
+            <div style={{ fontSize: 10, color: "var(--muted)", fontWeight: 600, letterSpacing: .5, textTransform: "uppercase", marginBottom: 6 }}>{s.label}</div>
+            <div style={{ fontFamily: "var(--mono)", fontSize: 28, fontWeight: 700, color: s.color }}>{s.val}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Filtros */}
+      <div className="filter-row">
+        <select className="filter-select" value={filtroStatus} onChange={e => setFiltroStatus(e.target.value)}>
+          <option value="">Todos los estados</option>
+          <option value="pendiente">Pendiente</option>
+          <option value="en_camino">En camino</option>
+          <option value="entregado">Entregado</option>
+        </select>
+        <select className="filter-select" value={filtroBase} onChange={e => setFiltroBase(e.target.value)}>
+          <option value="">Todos los barcos</option>
+          {bases.map(b => <option key={b}>{b}</option>)}
+        </select>
+        {(filtroStatus || filtroBase) && <button className="btn btn-ghost btn-sm" onClick={() => { setFiltroStatus(""); setFiltroBase(""); }}>✕ Limpiar</button>}
+        <span style={{ marginLeft: "auto", fontFamily: "var(--mono)", fontSize: 11, color: "var(--muted)" }}>{filtrados.length} de {pedidos.length}</span>
+      </div>
+
+      {/* Tabla */}
+      {loading ? <div className="loading"><span className="spin">◌</span></div> :
+        filtrados.length === 0 ? <div className="empty-state"><div style={{ fontSize: 28, marginBottom: 8 }}>📋</div>Sin pedidos aprobados</div> :
+        <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Base/Barco</th>
+                  <th>PAX × Días</th>
+                  <th>Solicitante</th>
+                  <th>Estado</th>
+                  <th>📋 Solicitud</th>
+                  <th>✅ Aprobación</th>
+                  <th>📦 Entrega</th>
+                  <th>Remito</th>
+                  <th>Notas</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtrados.map(p => {
+                  const st = p.tracker_status || "pendiente";
+                  return (
+                    <tr key={p.id} className="click" onClick={() => setSelected(p)}>
+                      <td style={{ fontWeight: 600, fontSize: 12 }}>{p.base_buque}</td>
+                      <td className="text-mono" style={{ fontSize: 11, color: "var(--muted)" }}>{p.pax} × {p.dias}</td>
+                      <td style={{ fontSize: 12 }}>{p.solicitado_por}</td>
+                      <td><span className={`badge ${statusColor[st] || "b-gray"}`}>{statusLabel[st] || st}</span></td>
+                      <td className="text-mono" style={{ fontSize: 11, color: "var(--muted)" }}>{p.created_at ? new Date(p.created_at).toLocaleDateString("es-AR") : "—"}</td>
+                      <td className="text-mono" style={{ fontSize: 11, color: p.fecha_aprobacion ? "var(--accent2)" : "var(--muted2)" }}>{p.fecha_aprobacion ? new Date(p.fecha_aprobacion).toLocaleDateString("es-AR") : "—"}</td>
+                      <td className="text-mono" style={{ fontSize: 11, color: p.fecha_entrega ? "var(--accent2)" : "var(--muted2)" }}>{p.fecha_entrega ? new Date(p.fecha_entrega).toLocaleDateString("es-AR") : "—"}</td>
+                      <td>{p.remito_url
+                        ? <a href={p.remito_url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} style={{ fontSize: 11, color: "var(--blue)" }}>📎 {p.nro_remito || "Ver"}</a>
+                        : <span style={{ fontSize: 11, color: "var(--muted2)" }}>{p.nro_remito || "—"}</span>
+                      }</td>
+                      <td style={{ fontSize: 11, color: "var(--muted)", maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.tracker_notas || "—"}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      }
+      {selected && <ModalTrackerEditar pedido={selected} onClose={() => setSelected(null)} onSave={(updated) => { setSelected(null); setPedidos(prev => prev.map(p => p.id === updated.id ? { ...p, ...updated } : p)); }} notify={notify} />}
+    </div>
+  );
+}
+
 
   return (
     <div>
@@ -965,6 +1250,7 @@ export default function App() {
     inbox: "VÍVERES — INBOX",
     historial: "VÍVERES — HISTORIAL",
     catalogo: "VÍVERES — CATÁLOGO",
+    tracker: "VÍVERES — TRACKER",
   };
 
   const NI = ({ id, icon, label, badge }) => (
@@ -994,6 +1280,7 @@ export default function App() {
           <NI id="nuevo"     icon="🛒" label="Nuevo Pedido" />
           <NI id="historial" icon="📋" label="Historial" />
           <NI id="catalogo"  icon="📦" label="Catálogo" />
+          <NI id="tracker"   icon="📊" label="Tracker" />
           <div style={{ flex: 1 }} />
           <div style={{ padding: "12px 18px", borderTop: "1px solid rgba(255,255,255,.1)" }}>
             <div className="ni back" onClick={() => window.open(PORTAL_URL, "_self")}>
@@ -1016,6 +1303,7 @@ export default function App() {
             {page === "nuevo"     && <PageNuevo notify={notify} onSaved={() => { setPage("historial"); loadCounts(); }} onCancel={() => setPage("historial")} />}
             {page === "historial" && <PageHistorial onNuevo={() => setPage("nuevo")} notify={notify} />}
             {page === "catalogo"  && <PageCatalogo notify={notify} />}
+            {page === "tracker"   && <PageTracker notify={notify} />}
           </div>
         </div>
       </div>
