@@ -91,6 +91,12 @@ const api = {
       if (errIns) throw errIns;
     }
   },
+  async eliminarPedido(id) {
+    const { error: errItems } = await supabase.from("viveres_pedido_items").delete().eq("pedido_id", id);
+    if (errItems) throw errItems;
+    const { error } = await supabase.from("viveres_pedidos").delete().eq("id", id);
+    if (error) throw error;
+  },
   async subirRemito(file, pedidoId) {
     const path = `viveres/remitos/${pedidoId}/${Date.now()}_${file.name}`;
     const { error } = await supabase.storage.from("cotizaciones").upload(path, file, { upsert: true });
@@ -1038,8 +1044,32 @@ function PageInbox({ notify, onNeedRefresh }) {
   const [pedidos, setPedidos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(null);
-  const load = useCallback(async () => { setLoading(true); try { setPedidos(await api.getPedidos({ status: "enviado" })); } finally { setLoading(false); } }, []);
+  const [eliminando, setEliminando] = useState(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try { setPedidos(await api.getPedidos({ status: "enviado" })); }
+    finally { setLoading(false); }
+  }, []);
+
   useEffect(() => { load(); }, [load]);
+
+  const handleEliminar = async (e, p) => {
+    e.stopPropagation();
+    if (!window.confirm(`¿Eliminar el pedido de ${p.base_buque}? Esta acción no se puede deshacer.`)) return;
+    setEliminando(p.id);
+    try {
+      await api.eliminarPedido(p.id);
+      notify("Pedido eliminado", "warn");
+      load();
+      onNeedRefresh();
+    } catch (err) {
+      notify("Error al eliminar: " + err.message, "error");
+    } finally {
+      setEliminando(null);
+    }
+  };
+
   return (
     <div>
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16, paddingBottom: 12, borderBottom: "2px solid var(--border)" }}>
@@ -1047,20 +1077,53 @@ function PageInbox({ notify, onNeedRefresh }) {
         <span className="ni-badge" style={{ position: "static" }}>{pedidos.length}</span>
       </div>
       {loading ? <div className="loading"><span className="spin">◌</span></div> :
-        pedidos.length === 0 ? <div className="empty-state"><div style={{ fontSize: 28, marginBottom: 8 }}>✅</div>Sin pedidos pendientes</div> :
-        pedidos.map(p => {
-          const cnt = (p.viveres_pedido_items || []).filter(it => it.cantidad_pedida > 0).length;
-          return <div key={p.id} className="req-row unread" onClick={() => setSelected(p)}>
-            <div className="flex-between mb8">
-              <div className="flex-gap"><span className="text-mono" style={{ fontSize: 11, color: "var(--accent)" }}>{fmtDate(p.fecha_pedido)}</span><span className="badge b-blue">Víveres</span></div>
-              <span style={{ fontSize: 10, color: "var(--muted)" }}>Parana Logística</span>
-            </div>
-            <div className="req-title">🚢 {p.base_buque} — {p.pax} PAX × {p.dias} días</div>
-            <div className="req-meta"><span>{p.solicitado_por}</span><span>·</span><span>{cnt} ítems</span>{p.fecha_necesaria && <><span>·</span><span style={{ color: "var(--warn)" }}>Necesario: {fmtDate(p.fecha_necesaria)}</span></>}</div>
-          </div>;
-        })
+        pedidos.length === 0
+          ? <div className="empty-state"><div style={{ fontSize: 28, marginBottom: 8 }}>✅</div>Sin pedidos pendientes</div>
+          : pedidos.map(p => {
+              const cnt = (p.viveres_pedido_items || []).filter(it => it.cantidad_pedida > 0).length;
+              return (
+                <div key={p.id} className="req-row unread" onClick={() => setSelected(p)}>
+                  <div className="flex-between mb8">
+                    <div className="flex-gap">
+                      <span className="text-mono" style={{ fontSize: 11, color: "var(--accent)" }}>{fmtDate(p.fecha_pedido)}</span>
+                      <span className="badge b-blue">Víveres</span>
+                    </div>
+                    <div className="flex-gap">
+                      <span style={{ fontSize: 10, color: "var(--muted)" }}>Parana Logística</span>
+                      <button
+                        onClick={e => handleEliminar(e, p)}
+                        disabled={eliminando === p.id}
+                        title="Eliminar pedido"
+                        style={{
+                          background: "none", border: "1px solid var(--border)", borderRadius: "var(--r)",
+                          color: "var(--muted2)", cursor: "pointer", fontSize: 11, padding: "2px 8px",
+                          fontFamily: "var(--sans)", fontWeight: 600, transition: "all .12s",
+                          opacity: eliminando === p.id ? 0.5 : 1,
+                        }}
+                        onMouseEnter={e => { e.currentTarget.style.color = "var(--danger)"; e.currentTarget.style.borderColor = "var(--danger)"; }}
+                        onMouseLeave={e => { e.currentTarget.style.color = "var(--muted2)"; e.currentTarget.style.borderColor = "var(--border)"; }}
+                      >
+                        {eliminando === p.id ? "..." : "✕ Eliminar"}
+                      </button>
+                    </div>
+                  </div>
+                  <div className="req-title">🚢 {p.base_buque} — {p.pax} PAX × {p.dias} días</div>
+                  <div className="req-meta">
+                    <span>{p.solicitado_por}</span><span>·</span><span>{cnt} ítems</span>
+                    {p.fecha_necesaria && <><span>·</span><span style={{ color: "var(--warn)" }}>Necesario: {fmtDate(p.fecha_necesaria)}</span></>}
+                  </div>
+                </div>
+              );
+            })
       }
-      {selected && <ModalRevisar pedido={selected} onClose={() => setSelected(null)} onActualizado={() => { setSelected(null); notify("Pedido actualizado", "success"); load(); onNeedRefresh(); }} notify={notify} />}
+      {selected && (
+        <ModalRevisar
+          pedido={selected}
+          onClose={() => setSelected(null)}
+          onActualizado={() => { setSelected(null); notify("Pedido actualizado", "success"); load(); onNeedRefresh(); }}
+          notify={notify}
+        />
+      )}
     </div>
   );
 }
