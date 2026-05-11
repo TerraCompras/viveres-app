@@ -53,20 +53,43 @@ const api = {
   },
   async crearPedido(pedido, items) {
     const { proyecto, ...resto } = pedido;
-    const { data: nuevo, error } = await supabase.from("viveres_pedidos").insert([{ ...resto, fecha_pedido: pedido.fecha_pedido || null, fecha_necesaria: pedido.fecha_necesaria || null }]).select().single();
+    const { data: nuevo, error } = await supabase
+      .from("viveres_pedidos")
+      .insert([{ ...resto, fecha_pedido: pedido.fecha_pedido || null, fecha_necesaria: pedido.fecha_necesaria || null }])
+      .select()
+      .single();
     if (error) throw error;
-    if (items?.length) await supabase.from("viveres_pedido_items").insert(items.map(it => ({ ...it, pedido_id: nuevo.id })));
+    if (items?.length) {
+      const { error: errItems } = await supabase
+        .from("viveres_pedido_items")
+        .insert(items.map(it => ({ ...it, pedido_id: nuevo.id })));
+      if (errItems) throw errItems;
+    }
     return nuevo;
   },
   async actualizarPedido(id, cambios) {
     const { proyecto, ...resto } = cambios;
-    const { data, error } = await supabase.from("viveres_pedidos").update({ ...resto, updated_at: new Date().toISOString() }).eq("id", id).select().single();
+    const { data, error } = await supabase
+      .from("viveres_pedidos")
+      .update({ ...resto, updated_at: new Date().toISOString() })
+      .eq("id", id)
+      .select()
+      .single();
     if (error) throw error;
     return data;
   },
   async actualizarItems(pedidoId, items) {
-    await supabase.from("viveres_pedido_items").delete().eq("pedido_id", pedidoId);
-    if (items?.length) await supabase.from("viveres_pedido_items").insert(items.map(it => ({ ...it, pedido_id: pedidoId })));
+    const { error: errDel } = await supabase
+      .from("viveres_pedido_items")
+      .delete()
+      .eq("pedido_id", pedidoId);
+    if (errDel) throw errDel;
+    if (items?.length) {
+      const { error: errIns } = await supabase
+        .from("viveres_pedido_items")
+        .insert(items.map(it => ({ ...it, pedido_id: pedidoId })));
+      if (errIns) throw errIns;
+    }
   },
   async subirRemito(file, pedidoId) {
     const path = `viveres/remitos/${pedidoId}/${Date.now()}_${file.name}`;
@@ -485,47 +508,87 @@ function PageNuevo({ notify, onSaved, onCancel }) {
 
 // ─── MODAL: REVISAR PEDIDO ────────────────────────────────────────────────────
 function ModalRevisar({ pedido, onClose, onActualizado, notify }) {
-  const [catalogo, setCatalogo] = useState([]);
-  const [parametros, setParametros] = useState([]);
   const [loading, setLoading] = useState(true);
   const [modo, setModo] = useState("detalle");
   const [motivoRechazo, setMotivoRechazo] = useState("");
   const [saving, setSaving] = useState(false);
+  const [itemsEdit, setItemsEdit] = useState([]);
 
-  useEffect(() => { Promise.all([api.getCatalogo(), api.getParametros()]).then(([cat, par]) => { setCatalogo(cat); setParametros(par); setLoading(false); }); }, []);
+  useEffect(() => {
+    const raw = (pedido.viveres_pedido_items || [])
+      .filter(it => it.cantidad_pedida > 0)
+      .map(it => ({ ...it, _cantidadOriginal: it.cantidad_pedida, _eliminado: false }));
+    setItemsEdit(raw);
+    setLoading(false);
+  }, [pedido]);
 
-  const items = pedido.viveres_pedido_items || [];
-  const itemsConPedido = items.filter(it => it.cantidad_pedida > 0);
+  const itemsVisibles = itemsEdit.filter(it => !it._eliminado);
+  const huboCambios = itemsEdit.some(
+    it => it._eliminado || it.cantidad_pedida !== it._cantidadOriginal
+  );
+
+  const setCantidad = (id, val) => {
+    setItemsEdit(prev =>
+      prev.map(it => it.id === id ? { ...it, cantidad_pedida: parseFloat(val) || 0 } : it)
+    );
+  };
+
+  const eliminarItem = (id) => {
+    setItemsEdit(prev =>
+      prev.map(it => it.id === id ? { ...it, _eliminado: true } : it)
+    );
+  };
+
+  const restaurarItem = (id) => {
+    setItemsEdit(prev =>
+      prev.map(it => it.id === id ? { ...it, _eliminado: false, cantidad_pedida: it._cantidadOriginal } : it)
+    );
+  };
 
   const handleAprobar = async () => {
+    if (itemsVisibles.length === 0) {
+      alert("No quedan ítems en el pedido. Rechazalo en cambio.");
+      return;
+    }
     setSaving(true);
     try {
-      await api.actualizarPedido(pedido.id, { status: "aprobado", fecha_aprobacion: new Date().toISOString(), tracker_status: "pendiente" });
-      notify("Pedido aprobado", "success"); onActualizado();
-    } finally { setSaving(false); }
+      const itemsAGuardar = itemsVisibles.map(
+        ({ _cantidadOriginal, _eliminado, ...rest }) => rest
+      );
+      await api.actualizarItems(pedido.id, itemsAGuardar);
+      await api.actualizarPedido(pedido.id, {
+        status: "aprobado",
+        fecha_aprobacion: new Date().toISOString(),
+        tracker_status: "pendiente",
+      });
+      notify("Pedido aprobado", "success");
+      onActualizado();
+    } catch (e) {
+      notify("Error: " + e.message, "error");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleRechazar = async () => {
     if (!motivoRechazo.trim()) return alert("Ingresá un motivo");
     setSaving(true);
-    try { await api.actualizarPedido(pedido.id, { status: "rechazado", observaciones: motivoRechazo }); notify("Pedido rechazado", "warn"); onActualizado(); }
-    finally { setSaving(false); }
+    try {
+      await api.actualizarPedido(pedido.id, {
+        status: "rechazado",
+        observaciones: motivoRechazo,
+      });
+      notify("Pedido rechazado", "warn");
+      onActualizado();
+    } finally {
+      setSaving(false);
+    }
   };
 
-  if (loading) return <div className="overlay"><div className="modal"><div className="mbody"><div className="loading"><span className="spin">◌</span></div></div></div></div>;
-
-  if (modo === "editar") return (
-    <div className="overlay" style={{ zIndex: 200 }}>
-      <div style={{ background: "var(--bg)", width: "100%", maxWidth: 1200, margin: "auto", borderRadius: 12, maxHeight: "90vh", overflow: "auto" }}>
-        <div style={{ padding: "16px 22px", background: "var(--surface2)", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between", borderRadius: "12px 12px 0 0" }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: "var(--navy)" }}>Editando — {pedido.base_buque}</div>
-          <button className="mclose" onClick={() => setModo("detalle")}>✕</button>
-        </div>
-        <div style={{ padding: 22 }}>
-          <FormPedido pedidoInicial={pedido} catalogoInicial={catalogo} parametros={parametros}
-            onSave={async (cab, items) => { await api.actualizarItems(pedido.id, items); await api.actualizarPedido(pedido.id, cab); notify("Actualizado", "success"); onActualizado(); }}
-            onCancel={() => setModo("detalle")} notify={notify} />
-        </div>
+  if (loading) return (
+    <div className="overlay">
+      <div className="modal">
+        <div className="mbody"><div className="loading"><span className="spin">◌</span></div></div>
       </div>
     </div>
   );
@@ -533,51 +596,203 @@ function ModalRevisar({ pedido, onClose, onActualizado, notify }) {
   return (
     <div className="overlay" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="modal modal-lg">
+        {/* HEADER */}
         <div className="mhdr">
           <div>
             <div className="mtitle">🚢 {pedido.base_buque} — Pedido de Víveres</div>
-            <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 4 }}>Parana Logística · {pedido.pax} PAX · {pedido.dias} días · {pedido.solicitado_por}{pedido.fecha_necesaria && <span style={{ color: "var(--warn)", marginLeft: 8 }}>Nec: {fmtDate(pedido.fecha_necesaria)}</span>}</div>
+            <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 4 }}>
+              Parana Logística · {pedido.pax} PAX · {pedido.dias} días · {pedido.solicitado_por}
+              {pedido.fecha_necesaria && (
+                <span style={{ color: "var(--warn)", marginLeft: 8 }}>Nec: {fmtDate(pedido.fecha_necesaria)}</span>
+              )}
+            </div>
           </div>
           <button className="mclose" onClick={onClose}>✕</button>
         </div>
+
+        {/* BODY */}
         <div className="mbody">
           <div className="tabs-row">
             <div className={`tab ${modo === "detalle" ? "active" : ""}`} onClick={() => setModo("detalle")}>Detalle</div>
-            <div className={`tab ${modo === "rechazar" ? "active" : ""}`} onClick={() => setModo("rechazar")} style={{ color: modo === "rechazar" ? "var(--danger)" : undefined, borderBottomColor: modo === "rechazar" ? "var(--danger)" : undefined }}>Rechazar</div>
+            <div
+              className={`tab ${modo === "rechazar" ? "active" : ""}`}
+              onClick={() => setModo("rechazar")}
+              style={{ color: modo === "rechazar" ? "var(--danger)" : undefined, borderBottomColor: modo === "rechazar" ? "var(--danger)" : undefined }}
+            >
+              Rechazar
+            </div>
           </div>
+
+          {/* TAB DETALLE */}
           {modo === "detalle" && (
             <div>
+              {huboCambios && (
+                <div className="info-box warn mb12" style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 8 }}>
+                  <span>⚠️</span>
+                  <span>Hay <strong>modificaciones sin aprobar</strong>. Usá "✓ Aprobar" para confirmarlas.</span>
+                </div>
+              )}
+
               <div className="table-wrap">
-                <table>
-                  <thead><tr><th>Categoría</th><th>Temp.</th><th>Descripción</th><th>Unidad</th><th>Unidad análisis</th><th>Stock</th><th>Pedido</th><th>Total análisis</th></tr></thead>
+                <table className="items-edit">
+                  <thead>
+                    <tr>
+                      <th>Categoría</th>
+                      <th>Temp.</th>
+                      <th>Descripción</th>
+                      <th>Unidad</th>
+                      <th style={{ width: 90, textAlign: "right" }}>Cant. original</th>
+                      <th style={{ width: 120, textAlign: "right" }}>Cant. aprobada</th>
+                      <th style={{ width: 32 }}></th>
+                    </tr>
+                  </thead>
                   <tbody>
-                    {itemsConPedido.length === 0
-                      ? <tr><td colSpan={8} style={{ textAlign: "center", padding: 24, color: "var(--muted2)" }}>Sin ítems pedidos</td></tr>
-                      : itemsConPedido.map((it, i) => {
-                          const totalAnalisis = (it.cantidad_pedida || 0) * (it.volumen_peso || 1);
-                          return <tr key={i}><td style={{ fontSize: 11, color: "var(--muted)" }}>{it.categoria}</td><td><TempBadge temp={it.temperatura} /></td><td style={{ fontWeight: 500 }}>{it.descripcion}</td><td style={{ fontSize: 11, color: "var(--muted)" }}>{it.cantidad_pedida} {it.unidad}</td><td style={{ fontSize: 10, color: "var(--muted2)", fontFamily: "var(--mono)" }}>{it.unidad_analisis || "Kg"}</td><td className="text-mono">{it.stock_actual || 0}</td><td className="text-mono" style={{ fontWeight: 700, color: "var(--accent2)" }}>{it.cantidad_pedida}</td><td className="text-mono" style={{ fontSize: 11, color: "var(--accent)" }}>{totalAnalisis > 0 ? `${totalAnalisis.toFixed(3)} ${it.unidad_analisis || "Kg"}` : "—"}</td></tr>;
-                        })
-                    }
+                    {itemsEdit.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} style={{ textAlign: "center", padding: 24, color: "var(--muted2)" }}>Sin ítems pedidos</td>
+                      </tr>
+                    ) : (
+                      itemsEdit.map(it => {
+                        const modificado = !it._eliminado && it.cantidad_pedida !== it._cantidadOriginal;
+                        return (
+                          <tr
+                            key={it.id}
+                            style={{
+                              opacity: it._eliminado ? 0.45 : 1,
+                              background: it._eliminado ? "#FEF2F2" : modificado ? "#FFFBEB" : "inherit",
+                              transition: "all .15s",
+                            }}
+                          >
+                            <td style={{ fontSize: 11, color: "var(--muted)" }}>{it.categoria}</td>
+                            <td><TempBadge temp={it.temperatura} /></td>
+                            <td style={{
+                              fontWeight: 500, fontSize: 12,
+                              textDecoration: it._eliminado ? "line-through" : "none",
+                              color: it._eliminado ? "var(--muted2)" : "var(--text)",
+                            }}>
+                              {it.descripcion}
+                            </td>
+                            <td style={{ fontSize: 11, color: "var(--muted)" }}>{it.unidad}</td>
+                            {/* Cantidad original */}
+                            <td style={{ fontFamily: "var(--mono)", fontSize: 12, color: "var(--muted)", textAlign: "right" }}>
+                              {it._cantidadOriginal}
+                            </td>
+                            {/* Cantidad editable */}
+                            <td>
+                              {it._eliminado ? (
+                                <button
+                                  onClick={() => restaurarItem(it.id)}
+                                  style={{ background: "none", border: "1px solid var(--border)", borderRadius: "var(--r)", fontSize: 10, color: "var(--muted)", cursor: "pointer", padding: "3px 8px", fontFamily: "var(--sans)" }}
+                                >
+                                  ↩ Restaurar
+                                </button>
+                              ) : (
+                                <div style={{ position: "relative" }}>
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    value={it.cantidad_pedida}
+                                    onChange={e => setCantidad(it.id, e.target.value)}
+                                    style={{
+                                      width: "100%",
+                                      background: modificado ? "#FEF9C3" : "var(--surface)",
+                                      border: `1px solid ${modificado ? "#FDE68A" : "var(--border)"}`,
+                                      borderRadius: "var(--r)",
+                                      fontFamily: "var(--mono)",
+                                      fontSize: 12,
+                                      fontWeight: modificado ? 700 : 400,
+                                      padding: "5px 8px",
+                                      outline: "none",
+                                      textAlign: "right",
+                                      color: modificado ? "#92400E" : "var(--text)",
+                                    }}
+                                  />
+                                  {modificado && (
+                                    <span
+                                      title="Cantidad modificada"
+                                      style={{ position: "absolute", right: -8, top: -6, width: 8, height: 8, borderRadius: "50%", background: "var(--warn)", display: "block" }}
+                                    />
+                                  )}
+                                </div>
+                              )}
+                            </td>
+                            {/* Botón eliminar */}
+                            <td>
+                              {!it._eliminado && (
+                                <button
+                                  onClick={() => eliminarItem(it.id)}
+                                  title="Eliminar ítem"
+                                  style={{ background: "none", border: "none", color: "var(--muted2)", cursor: "pointer", fontSize: 15, lineHeight: 1, padding: "2px 4px", borderRadius: 4, transition: "color .12s" }}
+                                  onMouseEnter={e => e.currentTarget.style.color = "var(--danger)"}
+                                  onMouseLeave={e => e.currentTarget.style.color = "var(--muted2)"}
+                                >
+                                  ✕
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
                   </tbody>
                 </table>
               </div>
+
+              {/* Resumen */}
+              {itemsEdit.length > 0 && (
+                <div style={{ marginTop: 10, fontSize: 11, color: "var(--muted)", fontFamily: "var(--mono)", display: "flex", gap: 16 }}>
+                  <span>{itemsVisibles.length} ítem{itemsVisibles.length !== 1 ? "s" : ""} activos</span>
+                  {itemsEdit.filter(it => it._eliminado).length > 0 && (
+                    <span style={{ color: "var(--danger)" }}>
+                      {itemsEdit.filter(it => it._eliminado).length} eliminado{itemsEdit.filter(it => it._eliminado).length !== 1 ? "s" : ""}
+                    </span>
+                  )}
+                  {itemsEdit.filter(it => !it._eliminado && it.cantidad_pedida !== it._cantidadOriginal).length > 0 && (
+                    <span style={{ color: "var(--warn)" }}>
+                      {itemsEdit.filter(it => !it._eliminado && it.cantidad_pedida !== it._cantidadOriginal).length} modificado{itemsEdit.filter(it => !it._eliminado && it.cantidad_pedida !== it._cantidadOriginal).length !== 1 ? "s" : ""}
+                    </span>
+                  )}
+                </div>
+              )}
+
               <div className="mt12 flex-gap">
-                <button className="btn btn-ghost btn-sm" onClick={() => exportarParaProveedor(pedido, itemsConPedido)}>↓ Exportar para proveedor</button>
+                <button className="btn btn-ghost btn-sm" onClick={() => exportarParaProveedor(pedido, itemsVisibles)}>
+                  ↓ Exportar para proveedor
+                </button>
               </div>
             </div>
           )}
+
+          {/* TAB RECHAZAR */}
           {modo === "rechazar" && (
             <div>
-              <div className="info-box mb12" style={{ fontSize: 12, borderLeft: "3px solid var(--danger)", background: "#FEF2F2" }}>El pedido quedará registrado como rechazado.</div>
-              <FG label="Motivo *"><textarea value={motivoRechazo} onChange={e => setMotivoRechazo(e.target.value)} placeholder="Explicá por qué se rechaza..." style={{ minHeight: 100 }} /></FG>
+              <div className="info-box mb12" style={{ fontSize: 12, borderLeft: "3px solid var(--danger)", background: "#FEF2F2" }}>
+                El pedido quedará registrado como rechazado.
+              </div>
+              <FG label="Motivo *">
+                <textarea value={motivoRechazo} onChange={e => setMotivoRechazo(e.target.value)} placeholder="Explicá por qué se rechaza..." style={{ minHeight: 100 }} />
+              </FG>
             </div>
           )}
         </div>
+
+        {/* FOOTER */}
         <div className="mftr">
           <button className="btn btn-ghost" onClick={onClose}>Cerrar</button>
-          <button className="btn btn-ghost btn-sm" onClick={() => setModo("editar")}>✏ Editar</button>
-          {modo === "rechazar" && <button className="btn btn-danger" onClick={handleRechazar} disabled={saving || !motivoRechazo.trim()}>{saving ? "..." : "✕ Confirmar rechazo"}</button>}
-          {modo === "detalle" && <button className="btn btn-primary" onClick={handleAprobar} disabled={saving || itemsConPedido.length === 0}>{saving ? "Aprobando..." : "✓ Aprobar"}</button>}
+          {modo === "rechazar" && (
+            <button className="btn btn-danger" onClick={handleRechazar} disabled={saving || !motivoRechazo.trim()}>
+              {saving ? "..." : "✕ Confirmar rechazo"}
+            </button>
+          )}
+          {modo === "detalle" && (
+            <button
+              className="btn btn-success"
+              onClick={handleAprobar}
+              disabled={saving || itemsVisibles.length === 0}
+            >
+              {saving ? "Aprobando..." : huboCambios ? "✓ Aprobar con cambios" : "✓ Aprobar"}
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -637,7 +852,6 @@ function ModalTrackerEditar({ pedido, onClose, onSave, notify }) {
           <button className="mclose" onClick={onClose}>✕</button>
         </div>
         <div className="mbody">
-          {/* Cadena de fechas */}
           <div className="fecha-chain">
             <div className={`fecha-step ${pedido.created_at ? "done" : ""}`}>
               <div style={{ fontSize: 20 }}>📋</div>
