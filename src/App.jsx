@@ -1268,7 +1268,7 @@ export default function App() {
         <nav className="sidebar">
           <div className="sidebar-header">
             <div className="sidebar-logo-wrap">
-              <img src="/pL.png" alt="Parana Logística" className="sidebar-logo-img" />
+              <img src="/PL.png" alt="Parana Logística" className="sidebar-logo-img" />
               <div><div className="sidebar-logo-main">Víveres</div><div className="sidebar-logo-sub">Parana Logística</div></div>
             </div>
           </div>
