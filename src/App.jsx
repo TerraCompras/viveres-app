@@ -1158,6 +1158,8 @@ function PageHistorial({ onNuevo, notify }) {
 }
 
 // ─── PAGE: CATÁLOGO ───────────────────────────────────────────────────────────
+const CATEGORIAS_CATALOGO = ["Almacén","Bebidas","Carnicería","Electro","Fiambrería","Frutas","Huevos","Lácteos","Limpieza","Pan","Pastas","Pescadería","Quesos","Snack y Postres","Verduras","Otro"];
+
 function PageCatalogo({ notify }) {
   const [catalogo, setCatalogo] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1165,80 +1167,256 @@ function PageCatalogo({ notify }) {
   const [filtroCateg, setFiltroCateg] = useState("");
   const [modal, setModal] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [savingId, setSavingId] = useState(null);
+  const [eliminandoId, setEliminandoId] = useState(null);
+  const [editados, setEditados] = useState({}); // id -> campos modificados
   const [form, setForm] = useState({ codigo: "", categoria: "Almacén", subcategoria: "", temperatura: "Seco", descripcion: "", unidad: "Unidad", unidad_analisis: "Kg", volumen_peso: "1" });
+
   useEffect(() => { api.getCatalogo().then(d => { setCatalogo(d); setLoading(false); }); }, []);
+
   const categorias = [...new Set(catalogo.map(c => c.categoria))].sort();
   const filtrado = catalogo.filter(c => {
     if (filtroCateg && c.categoria !== filtroCateg) return false;
     if (busqueda && !c.descripcion.toLowerCase().includes(busqueda.toLowerCase()) && !c.codigo?.toLowerCase().includes(busqueda.toLowerCase())) return false;
     return true;
   });
+
+  // Edición inline
+  const setcampo = (id, campo, valor) => {
+    setEditados(prev => ({ ...prev, [id]: { ...(prev[id] || {}), [campo]: valor } }));
+    setCatalogo(prev => prev.map(c => c.id === id ? { ...c, [campo]: valor } : c));
+  };
+
+  const getVal = (c, campo) => editados[c.id]?.[campo] !== undefined ? editados[c.id][campo] : c[campo];
+  const tienecambios = (id) => !!editados[id] && Object.keys(editados[id]).length > 0;
+
+  const handleGuardarFila = async (c) => {
+    if (!tieneambios(c.id)) return;
+    setSavingId(c.id);
+    try {
+      const cambios = editados[c.id];
+      if (cambios.volumen_peso !== undefined) cambios.volumen_peso = parseFloat(cambios.volumen_peso) || 1;
+      const { error } = await supabase.from("viveres_catalogo").update(cambios).eq("id", c.id);
+      if (error) throw error;
+      setEditados(prev => { const n = { ...prev }; delete n[c.id]; return n; });
+      notify("Guardado", "success");
+    } catch (e) {
+      notify("Error: " + e.message, "error");
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  const handleEliminarFila = async (c) => {
+    if (!window.confirm(`¿Eliminar "${c.descripcion}" del catálogo?`)) return;
+    setEliminandoId(c.id);
+    try {
+      const { error } = await supabase.from("viveres_catalogo").delete().eq("id", c.id);
+      if (error) throw error;
+      setCatalogo(prev => prev.filter(x => x.id !== c.id));
+      notify("Ítem eliminado", "warn");
+    } catch (e) {
+      notify("Error: " + e.message, "error");
+    } finally {
+      setEliminandoId(null);
+    }
+  };
+
+  // Nuevo ítem
   const setF = (k, v) => setForm(f => ({ ...f, [k]: v }));
-  const handleGuardar = async () => {
+  const handleAgregar = async () => {
     if (!form.descripcion.trim()) return alert("La descripción es obligatoria");
     setSaving(true);
     try {
       const { data, error } = await supabase.from("viveres_catalogo").insert([{ ...form, volumen_peso: parseFloat(form.volumen_peso) || 1, activo: true }]).select().single();
       if (error) throw error;
-      setCatalogo(prev => [...prev, data]); setModal(false);
+      setCatalogo(prev => [...prev, data]);
+      setModal(false);
       setForm({ codigo: "", categoria: "Almacén", subcategoria: "", temperatura: "Seco", descripcion: "", unidad: "Unidad", unidad_analisis: "Kg", volumen_peso: "1" });
       notify("Ítem agregado", "success");
     } catch (e) { alert("Error: " + e.message); }
     finally { setSaving(false); }
   };
+
+  const inStyle = {
+    background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 4,
+    color: "var(--text)", fontFamily: "var(--mono)", fontSize: 11, padding: "3px 6px",
+    outline: "none", width: "100%",
+  };
+  const inStyleMod = { ...inStyle, background: "#FEF9C3", border: "1px solid #FDE68A", fontWeight: 600 };
+
+  // helper para saber si un campo fue modificado
+  const mod = (c, campo) => editados[c.id]?.[campo] !== undefined;
+  // helper para guardar (typo fix)
+  const tieneambios = (id) => !!editados[id] && Object.keys(editados[id]).length > 0;
+
   return (
     <div>
       <div className="filter-row mb12">
         <input className="filter-input" placeholder="🔍 Buscar..." value={busqueda} onChange={e => setBusqueda(e.target.value)} style={{ minWidth: 250 }} />
-        <select className="filter-select" value={filtroCateg} onChange={e => setFiltroCateg(e.target.value)}><option value="">Todas las categorías</option>{categorias.map(c => <option key={c}>{c}</option>)}</select>
+        <select className="filter-select" value={filtroCateg} onChange={e => setFiltroCateg(e.target.value)}>
+          <option value="">Todas las categorías</option>
+          {categorias.map(c => <option key={c}>{c}</option>)}
+        </select>
         {(busqueda || filtroCateg) && <button className="btn btn-ghost btn-sm" onClick={() => { setBusqueda(""); setFiltroCateg(""); }}>✕</button>}
         <span style={{ marginLeft: "auto", fontFamily: "var(--mono)", fontSize: 11, color: "var(--muted)" }}>{filtrado.length} de {catalogo.length}</span>
         <button className="btn btn-primary btn-sm" onClick={() => setModal(true)}>+ Agregar ítem</button>
       </div>
+
+      {Object.keys(editados).length > 0 && (
+        <div className="info-box warn mb12" style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 8 }}>
+          <span>⚠️</span>
+          <span><strong>{Object.keys(editados).length} ítem{Object.keys(editados).length !== 1 ? "s" : ""} con cambios sin guardar.</strong> Usá el botón 💾 de cada fila para guardar.</span>
+        </div>
+      )}
+
       {loading ? <div className="loading"><span className="spin">◌</span></div> :
         <div className="card" style={{ padding: 0, overflow: "hidden" }}>
           <div className="table-wrap">
-            <table>
-              <thead><tr><th>Código</th><th>Categoría</th><th>Temp.</th><th>Descripción</th><th>Unidad pedido</th><th>Unidad análisis</th><th>Vol/Peso x unidad</th></tr></thead>
+            <table className="items-edit">
+              <thead>
+                <tr>
+                  <th>Código</th>
+                  <th>Categoría</th>
+                  <th>Temp.</th>
+                  <th>Descripción</th>
+                  <th>Unidad pedido</th>
+                  <th>Unidad análisis</th>
+                  <th>Vol/Peso</th>
+                  <th style={{ width: 70 }}></th>
+                </tr>
+              </thead>
               <tbody>
-                {filtrado.map(c => <tr key={c.id}>
-                  <td className="text-mono" style={{ fontSize: 10, color: "var(--muted)" }}>{c.codigo || "—"}</td>
-                  <td style={{ fontSize: 12, color: "var(--muted)" }}>{c.categoria}</td>
-                  <td><TempBadge temp={c.temperatura} /></td>
-                  <td style={{ fontWeight: 500, fontSize: 12 }}>{c.descripcion}</td>
-                  <td style={{ fontSize: 11, color: "var(--muted)" }}>{c.unidad || "—"}</td>
-                  <td style={{ fontSize: 11, color: "var(--accent)", fontFamily: "var(--mono)" }}>{c.unidad_analisis || "Kg"}</td>
-                  <td className="text-mono" style={{ fontSize: 11, color: "var(--muted)" }}>{c.volumen_peso || 1}</td>
-                </tr>)}
+                {filtrado.map(c => {
+                  const hayC = tieneambios(c.id);
+                  const guardando = savingId === c.id;
+                  const eliminando = eliminandoId === c.id;
+                  return (
+                    <tr key={c.id} style={{ background: hayC ? "#FFFBEB" : "inherit" }}>
+                      <td>
+                        <input
+                          value={getVal(c, "codigo") || ""}
+                          onChange={e => setcampo(c.id, "codigo", e.target.value)}
+                          style={mod(c, "codigo") ? inStyleMod : inStyle}
+                          placeholder="—"
+                        />
+                      </td>
+                      <td>
+                        <select
+                          value={getVal(c, "categoria") || ""}
+                          onChange={e => setcampo(c.id, "categoria", e.target.value)}
+                          style={mod(c, "categoria") ? { ...inStyleMod, fontFamily: "var(--sans)" } : { ...inStyle, fontFamily: "var(--sans)" }}
+                        >
+                          {CATEGORIAS_CATALOGO.map(cat => <option key={cat}>{cat}</option>)}
+                        </select>
+                      </td>
+                      <td>
+                        <select
+                          value={getVal(c, "temperatura") || "Seco"}
+                          onChange={e => setcampo(c.id, "temperatura", e.target.value)}
+                          style={mod(c, "temperatura") ? { ...inStyleMod, fontFamily: "var(--sans)" } : { ...inStyle, fontFamily: "var(--sans)" }}
+                        >
+                          <option>Seco</option>
+                          <option>Refrigerado</option>
+                          <option>Congelado</option>
+                        </select>
+                      </td>
+                      <td style={{ minWidth: 180 }}>
+                        <input
+                          value={getVal(c, "descripcion") || ""}
+                          onChange={e => setcampo(c.id, "descripcion", e.target.value)}
+                          style={mod(c, "descripcion") ? { ...inStyleMod, fontWeight: 700 } : { ...inStyle, fontWeight: 500 }}
+                        />
+                      </td>
+                      <td>
+                        <select
+                          value={getVal(c, "unidad") || "Unidad"}
+                          onChange={e => setcampo(c.id, "unidad", e.target.value)}
+                          style={mod(c, "unidad") ? { ...inStyleMod, fontFamily: "var(--sans)" } : { ...inStyle, fontFamily: "var(--sans)" }}
+                        >
+                          {UNIDADES_PEDIDO.map(u => <option key={u}>{u}</option>)}
+                        </select>
+                      </td>
+                      <td>
+                        <select
+                          value={getVal(c, "unidad_analisis") || "Kg"}
+                          onChange={e => setcampo(c.id, "unidad_analisis", e.target.value)}
+                          style={mod(c, "unidad_analisis") ? { ...inStyleMod, fontFamily: "var(--sans)" } : { ...inStyle, fontFamily: "var(--sans)" }}
+                        >
+                          {UNIDADES_ANALISIS.map(u => <option key={u}>{u}</option>)}
+                        </select>
+                      </td>
+                      <td style={{ width: 80 }}>
+                        <input
+                          type="number"
+                          step="0.001"
+                          min="0"
+                          value={getVal(c, "volumen_peso") ?? 1}
+                          onChange={e => setcampo(c.id, "volumen_peso", e.target.value)}
+                          style={mod(c, "volumen_peso") ? inStyleMod : inStyle}
+                        />
+                      </td>
+                      <td>
+                        <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                          {hayC && (
+                            <button
+                              onClick={() => handleGuardarFila(c)}
+                              disabled={guardando}
+                              title="Guardar cambios"
+                              style={{ background: "var(--accent2)", border: "none", borderRadius: 4, color: "#fff", cursor: "pointer", fontSize: 13, padding: "3px 7px", opacity: guardando ? 0.5 : 1 }}
+                            >
+                              {guardando ? "..." : "💾"}
+                            </button>
+                          )}
+                          <button
+                            onClick={() => handleEliminarFila(c)}
+                            disabled={eliminando}
+                            title="Eliminar ítem"
+                            style={{ background: "none", border: "none", color: "var(--muted2)", cursor: "pointer", fontSize: 14, padding: "3px 5px", borderRadius: 4, opacity: eliminando ? 0.5 : 1, transition: "color .12s" }}
+                            onMouseEnter={e => e.currentTarget.style.color = "var(--danger)"}
+                            onMouseLeave={e => e.currentTarget.style.color = "var(--muted2)"}
+                          >
+                            {eliminando ? "..." : "✕"}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         </div>
       }
-      {modal && <div className="overlay" onClick={e => e.target === e.currentTarget && setModal(false)}>
-        <div className="modal" style={{ maxWidth: 600 }}>
-          <div className="mhdr"><div className="mtitle">Agregar ítem al catálogo</div><button className="mclose" onClick={() => setModal(false)}>✕</button></div>
-          <div className="mbody">
-            <div className="form-grid">
-              <FG label="Código"><input value={form.codigo} onChange={e => setF("codigo", e.target.value)} placeholder="Ej: NAV001" /></FG>
-              <FG label="Temperatura *"><select value={form.temperatura} onChange={e => setF("temperatura", e.target.value)}><option>Seco</option><option>Refrigerado</option><option>Congelado</option></select></FG>
-              <FG label="Categoría *"><select value={form.categoria} onChange={e => setF("categoria", e.target.value)}>{["Almacén","Carne","Pescado","Fiambre","Lácteos","Quesos","Verduras","Frutas","Huevos","Pastas","Pan","Snack y Postres","Otro"].map(c => <option key={c}>{c}</option>)}</select></FG>
-              <FG label="Subcategoría"><input value={form.subcategoria} onChange={e => setF("subcategoria", e.target.value)} /></FG>
+
+      {modal && (
+        <div className="overlay" onClick={e => e.target === e.currentTarget && setModal(false)}>
+          <div className="modal" style={{ maxWidth: 600 }}>
+            <div className="mhdr"><div className="mtitle">Agregar ítem al catálogo</div><button className="mclose" onClick={() => setModal(false)}>✕</button></div>
+            <div className="mbody">
+              <div className="form-grid">
+                <FG label="Código"><input value={form.codigo} onChange={e => setF("codigo", e.target.value)} placeholder="Ej: NAV001" /></FG>
+                <FG label="Temperatura *"><select value={form.temperatura} onChange={e => setF("temperatura", e.target.value)}><option>Seco</option><option>Refrigerado</option><option>Congelado</option></select></FG>
+                <FG label="Categoría *"><select value={form.categoria} onChange={e => setF("categoria", e.target.value)}>{CATEGORIAS_CATALOGO.map(c => <option key={c}>{c}</option>)}</select></FG>
+                <FG label="Subcategoría"><input value={form.subcategoria} onChange={e => setF("subcategoria", e.target.value)} /></FG>
+              </div>
+              <FG label="Descripción *" full><input value={form.descripcion} onChange={e => setF("descripcion", e.target.value)} placeholder="Nombre completo del producto" /></FG>
+              <div className="form-grid-3 mt12">
+                <FG label="Unidad de pedido" hint="Cómo se pide al proveedor"><select value={form.unidad} onChange={e => setF("unidad", e.target.value)}>{UNIDADES_PEDIDO.map(u => <option key={u}>{u}</option>)}</select></FG>
+                <FG label="Unidad de análisis" hint="Para el cálculo de dieta"><select value={form.unidad_analisis} onChange={e => setF("unidad_analisis", e.target.value)}>{UNIDADES_ANALISIS.map(u => <option key={u}>{u}</option>)}</select></FG>
+                <FG label="Vol/Peso por unidad" hint="Ej: 1 lata = 0.170 Kg"><input type="number" step="0.001" min="0" value={form.volumen_peso} onChange={e => setF("volumen_peso", e.target.value)} placeholder="1" /></FG>
+              </div>
+              {form.volumen_peso && parseFloat(form.volumen_peso) !== 1 && (
+                <div className="info-box accent mt8" style={{ fontSize: 11 }}>Ejemplo: 3 {form.unidad} → {(3 * parseFloat(form.volumen_peso)).toFixed(3)} {form.unidad_analisis}</div>
+              )}
             </div>
-            <FG label="Descripción *" full><input value={form.descripcion} onChange={e => setF("descripcion", e.target.value)} placeholder="Nombre completo del producto" /></FG>
-            <div className="form-grid-3 mt12">
-              <FG label="Unidad de pedido" hint="Cómo se pide al proveedor"><select value={form.unidad} onChange={e => setF("unidad", e.target.value)}>{UNIDADES_PEDIDO.map(u => <option key={u}>{u}</option>)}</select></FG>
-              <FG label="Unidad de análisis" hint="Para el cálculo de dieta"><select value={form.unidad_analisis} onChange={e => setF("unidad_analisis", e.target.value)}>{UNIDADES_ANALISIS.map(u => <option key={u}>{u}</option>)}</select></FG>
-              <FG label="Vol/Peso por unidad" hint="Ej: 1 lata = 0.170 Kg"><input type="number" step="0.001" min="0" value={form.volumen_peso} onChange={e => setF("volumen_peso", e.target.value)} placeholder="1" /></FG>
+            <div className="mftr">
+              <button className="btn btn-ghost" onClick={() => setModal(false)}>Cancelar</button>
+              <button className="btn btn-primary" onClick={handleAgregar} disabled={saving}>{saving ? "Guardando..." : "Agregar"}</button>
             </div>
-            {form.volumen_peso && parseFloat(form.volumen_peso) !== 1 && <div className="info-box accent mt8" style={{ fontSize: 11 }}>Ejemplo: 3 {form.unidad} → {(3 * parseFloat(form.volumen_peso)).toFixed(3)} {form.unidad_analisis}</div>}
-          </div>
-          <div className="mftr">
-            <button className="btn btn-ghost" onClick={() => setModal(false)}>Cancelar</button>
-            <button className="btn btn-primary" onClick={handleGuardar} disabled={saving}>{saving ? "Guardando..." : "Agregar"}</button>
           </div>
         </div>
-      </div>}
+      )}
     </div>
   );
 }
@@ -1268,7 +1446,7 @@ export default function App() {
         <nav className="sidebar">
           <div className="sidebar-header">
             <div className="sidebar-logo-wrap">
-              <img src="/PL.png" alt="Parana Logística" className="sidebar-logo-img" />
+              <img src="/pL.png" alt="Parana Logística" className="sidebar-logo-img" />
               <div><div className="sidebar-logo-main">Víveres</div><div className="sidebar-logo-sub">Parana Logística</div></div>
             </div>
           </div>
