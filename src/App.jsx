@@ -221,6 +221,102 @@ tr.click:hover td{background:var(--surface2);cursor:pointer}
 .fecha-step.done .fecha-step-label{color:#065F46}
 .fecha-step.done .fecha-step-val{color:#065F46}
 .fecha-arrow{display:flex;align-items:center;color:var(--muted2);font-size:18px;flex-shrink:0}
+
+/* ── RESPONSIVE MOBILE ── */
+@media (max-width: 768px) {
+
+  /* Layout: sidebar se oculta, nav pasa abajo */
+  .app { flex-direction: column; }
+  .sidebar { display: none; }
+  .main { width: 100%; padding-bottom: 72px; }
+
+  /* Topbar mobile */
+  .topbar { padding: 10px 16px; }
+  .topbar-title { font-size: 11px; }
+
+  /* Content mobile */
+  .content { padding: 14px 14px; }
+
+  /* Cards */
+  .card { padding: 14px; margin-bottom: 12px; }
+
+  /* Formularios: 1 columna en mobile */
+  .form-grid { grid-template-columns: 1fr; gap: 10px; }
+  .form-grid-3 { grid-template-columns: 1fr; gap: 10px; }
+
+  /* Tablas: scroll horizontal */
+  .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  table { font-size: 11px; min-width: 500px; }
+  th, td { padding: 7px 8px; }
+
+  /* Filtros: columna en mobile */
+  .filter-row { flex-direction: column; align-items: stretch; }
+  .filter-input, .filter-select { min-width: unset; width: 100%; }
+
+  /* Botones */
+  .btn { font-size: 11px; padding: 8px 12px; }
+  .mftr { flex-wrap: wrap; gap: 8px; }
+  .mftr .btn { flex: 1; justify-content: center; }
+
+  /* Modal full screen en mobile */
+  .overlay { padding: 0; align-items: flex-end; }
+  .modal { border-radius: 16px 16px 0 0; max-width: 100%; max-height: 92vh; overflow-y: auto; }
+  .modal-lg { max-width: 100%; }
+
+  /* Req rows */
+  .req-meta { gap: 8px; }
+  .req-title { font-size: 13px; }
+
+  /* Dieta grid */
+  .dieta-grid { grid-template-columns: 1fr; }
+
+  /* Fecha chain */
+  .fecha-chain { gap: 6px; }
+  .fecha-step { min-width: 80px; padding: 8px 10px; }
+
+  /* Tabs scroll */
+  .tabs-row { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .tab { font-size: 10px; padding: 8px 12px; }
+
+  /* Stats */
+  .stats { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .stat { padding: 12px; }
+  .stat-value { font-size: 22px; }
+
+  /* Notif */
+  .notif { bottom: 80px; right: 10px; left: 10px; max-width: unset; }
+}
+
+/* ── BOTTOM NAV (solo mobile) ── */
+@media (max-width: 768px) {
+  .mobile-nav {
+    display: flex !important;
+    position: fixed; bottom: 0; left: 0; right: 0;
+    background: var(--navy); border-top: 1px solid rgba(255,255,255,0.1);
+    z-index: 50; height: 64px;
+    justify-content: space-around; align-items: center;
+    padding: 0 8px; box-shadow: 0 -2px 12px rgba(33,51,99,0.2);
+  }
+  .mobile-nav-item {
+    display: flex; flex-direction: column; align-items: center; gap: 3px;
+    cursor: pointer; padding: 6px 10px; border-radius: 8px;
+    color: rgba(255,255,255,0.5); transition: all .15s; flex: 1;
+    position: relative;
+  }
+  .mobile-nav-item.active { color: #fff; background: rgba(255,255,255,0.1); }
+  .mobile-nav-item:hover { color: #fff; }
+  .mobile-nav-icon { font-size: 18px; line-height: 1; }
+  .mobile-nav-label { font-size: 9px; font-weight: 600; letter-spacing: 0.3px; text-transform: uppercase; font-family: var(--mono); }
+  .mobile-nav-badge {
+    position: absolute; top: 4px; right: 8px;
+    background: var(--danger); color: #fff;
+    font-family: var(--mono); font-size: 8px; font-weight: 700;
+    padding: 1px 5px; border-radius: 8px; min-width: 16px; text-align: center;
+  }
+}
+@media (min-width: 769px) {
+  .mobile-nav { display: none !important; }
+}
 `;
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
@@ -1571,6 +1667,30 @@ function ViveresApp() {
         </div>
       </div>
       <Notif msg={notif} onClose={() => setNotif(null)} />
+      {/* Bottom nav — solo visible en mobile */}
+      <nav className="mobile-nav">
+        <div className={`mobile-nav-item ${page === "inbox" ? "active" : ""}`} onClick={() => setPage("inbox")}>
+          <span className="mobile-nav-icon">📬</span>
+          <span className="mobile-nav-label">Inbox</span>
+          {inboxCount > 0 && <span className="mobile-nav-badge">{inboxCount}</span>}
+        </div>
+        <div className={`mobile-nav-item ${page === "nuevo" ? "active" : ""}`} onClick={() => setPage("nuevo")}>
+          <span className="mobile-nav-icon">🛒</span>
+          <span className="mobile-nav-label">Nuevo</span>
+        </div>
+        <div className={`mobile-nav-item ${page === "historial" ? "active" : ""}`} onClick={() => setPage("historial")}>
+          <span className="mobile-nav-icon">📋</span>
+          <span className="mobile-nav-label">Historial</span>
+        </div>
+        <div className={`mobile-nav-item ${page === "tracker" ? "active" : ""}`} onClick={() => setPage("tracker")}>
+          <span className="mobile-nav-icon">📊</span>
+          <span className="mobile-nav-label">Tracker</span>
+        </div>
+        <div className={`mobile-nav-item ${page === "catalogo" ? "active" : ""}`} onClick={() => setPage("catalogo")}>
+          <span className="mobile-nav-icon">📦</span>
+          <span className="mobile-nav-label">Catálogo</span>
+        </div>
+      </nav>
     </>
   );
 }
