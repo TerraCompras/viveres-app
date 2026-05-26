@@ -1421,8 +1421,99 @@ function PageCatalogo({ notify }) {
   );
 }
 
+// ─── LOGIN PAGE ───────────────────────────────────────────────────────────────
+function LoginPage() {
+  const [email, setEmail]     = useState("");
+  const [pass, setPass]       = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError]     = useState("");
+
+  const handleLogin = async () => {
+    setLoading(true); setError("");
+    try {
+      const { error: e } = await supabase.auth.signInWithPassword({ email, password: pass });
+      if (e) setError("Credenciales incorrectas. Verificá tu email y contraseña.");
+    } catch {
+      setError("Error de conexión. Verificá tu red e intentá nuevamente.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleKey = (e) => { if (e.key === "Enter") handleLogin(); };
+
+  const loginCSS = `
+    .login-wrap{min-height:100vh;display:flex;background:#213363;position:relative;overflow:hidden}
+    .login-overlay{position:absolute;inset:0;z-index:1;background:linear-gradient(135deg,rgba(33,51,99,0.93) 0%,rgba(33,51,99,0.75) 60%,rgba(33,51,99,0.93) 100%)}
+    .login-lines{position:absolute;inset:0;z-index:0;background-image:linear-gradient(rgba(35,92,150,0.06) 1px,transparent 1px),linear-gradient(90deg,rgba(35,92,150,0.06) 1px,transparent 1px);background-size:60px 60px}
+    .login-split{position:relative;z-index:2;display:flex;width:100%}
+    .login-left{flex:1;display:flex;flex-direction:column;justify-content:center;padding:80px 60px;border-right:1px solid rgba(255,255,255,0.1)}
+    .login-eyebrow{font-family:'DM Mono',monospace;font-size:10px;letter-spacing:3px;color:rgba(255,255,255,0.4);text-transform:uppercase;margin-bottom:16px}
+    .login-logo-row{display:flex;align-items:center;gap:14px;margin-bottom:16px}
+    .login-logo-img{width:48px;height:48px;border-radius:12px;object-fit:cover;border:2px solid rgba(255,255,255,0.15)}
+    .login-title{font-size:44px;font-weight:900;color:#fff;line-height:0.95;letter-spacing:-2px}
+    .login-title span{color:#7EB8E8;display:block}
+    .login-line{width:48px;height:3px;background:#235C96;margin:18px 0}
+    .login-sub{font-size:13px;color:rgba(255,255,255,0.4);line-height:1.7;max-width:300px;font-style:italic}
+    .login-right{width:420px;flex-shrink:0;display:flex;align-items:center;justify-content:center;padding:60px 48px}
+    .login-card{width:100%;background:rgba(255,255,255,0.04);border:1px solid rgba(35,92,150,0.25);border-radius:16px;padding:36px;backdrop-filter:blur(20px)}
+    .login-card-title{font-size:15px;font-weight:700;color:#fff;margin-bottom:4px}
+    .login-card-sub{font-family:'DM Mono',monospace;font-size:10px;color:rgba(255,255,255,0.35);letter-spacing:1px;margin-bottom:24px;text-transform:uppercase}
+    .login-fg{display:flex;flex-direction:column;gap:5px;margin-bottom:12px}
+    .login-fg label{font-size:9px;color:rgba(255,255,255,0.4);letter-spacing:1px;text-transform:uppercase;font-weight:600}
+    .login-fg input{border:1px solid rgba(255,255,255,0.12);border-radius:8px;padding:10px 13px;font-size:13px;font-family:'Montserrat',sans-serif;color:#fff;background:rgba(255,255,255,0.06);outline:none;transition:border-color .15s}
+    .login-fg input::placeholder{color:rgba(255,255,255,0.2)}
+    .login-fg input:focus{border-color:#7EB8E8;background:rgba(255,255,255,0.09)}
+    .login-submit{width:100%;padding:11px;margin-top:8px;background:#235C96;color:#fff;border:none;border-radius:8px;font-family:'Montserrat',sans-serif;font-size:13px;font-weight:700;cursor:pointer;transition:background .15s}
+    .login-submit:hover{background:#2E75C0}
+    .login-submit:disabled{opacity:.5;cursor:not-allowed}
+    .login-err{background:rgba(239,68,68,0.12);color:#FCA5A5;border:1px solid rgba(239,68,68,0.25);border-radius:8px;padding:10px 13px;font-size:12px;margin-bottom:12px}
+    .login-foot{text-align:center;font-family:'DM Mono',monospace;font-size:9px;color:rgba(255,255,255,0.2);margin-top:16px;letter-spacing:1px}
+  `;
+
+  return (
+    <>
+      <style>{loginCSS}</style>
+      <div className="login-wrap">
+        <div className="login-lines" />
+        <div className="login-overlay" />
+        <div className="login-split">
+          <div className="login-left">
+            <div className="login-eyebrow">Módulo de gestión</div>
+            <div className="login-logo-row">
+              <img src="/PL.png" alt="Parana Logística" className="login-logo-img" />
+            </div>
+            <div className="login-title">VÍVERES<span>PARANA</span></div>
+            <div className="login-line" />
+            <div className="login-sub">Parana Logística · Pedidos de víveres para embarcaciones con control nutricional.</div>
+          </div>
+          <div className="login-right">
+            <div className="login-card">
+              <div className="login-card-title">Acceso al sistema</div>
+              <div className="login-card-sub">Solo personal autorizado</div>
+              {error && <div className="login-err">{error}</div>}
+              <div className="login-fg">
+                <label>Email</label>
+                <input type="email" value={email} onChange={e => setEmail(e.target.value)} onKeyDown={handleKey} placeholder="usuario@paranalogistica.com.ar" autoFocus />
+              </div>
+              <div className="login-fg">
+                <label>Contraseña</label>
+                <input type="password" value={pass} onChange={e => setPass(e.target.value)} onKeyDown={handleKey} placeholder="••••••••" />
+              </div>
+              <button className="login-submit" onClick={handleLogin} disabled={loading || !email || !pass}>
+                {loading ? "Ingresando..." : "Ingresar →"}
+              </button>
+              <div className="login-foot">Parana Logística · Víveres · Confidencial</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
 // ─── ROOT APP ─────────────────────────────────────────────────────────────────
-export default function App() {
+function ViveresApp() {
   const [page, setPage] = useState("inbox");
   const [notif, setNotif] = useState(null);
   const [inboxCount, setInboxCount] = useState(0);
@@ -1458,7 +1549,7 @@ export default function App() {
           <NI id="catalogo"  icon="📦" label="Catálogo" />
           <div style={{ flex: 1 }} />
           <div style={{ padding: "12px 18px", borderTop: "1px solid rgba(255,255,255,.1)" }}>
-            <div className="ni back" onClick={() => window.open(PORTAL_URL, "_self")}><span className="ni-icon">←</span><span>Volver al portal</span></div>
+            <div className="ni back" onClick={() => window.location.href = PORTAL_URL}><span className="ni-icon">←</span><span>Volver al portal</span></div>
             <div style={{ fontSize: 9, color: "rgba(255,255,255,.3)", fontFamily: "var(--mono)", letterSpacing: 1, marginTop: 8 }}>MÓDULO VÍVERES v2.2</div>
           </div>
         </nav>
@@ -1482,4 +1573,32 @@ export default function App() {
       <Notif msg={notif} onClose={() => setNotif(null)} />
     </>
   );
+}
+
+export default function App() {
+  const [session, setSession] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setLoading(false);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  if (loading) return (
+    <div style={{ minHeight:"100vh", display:"flex", alignItems:"center", justifyContent:"center", background:"#213363" }}>
+      <div style={{ fontFamily:"'DM Mono',monospace", fontSize:10, color:"rgba(255,255,255,0.3)", letterSpacing:3, textTransform:"uppercase" }}>Cargando...</div>
+    </div>
+  );
+
+  if (!session) return <LoginPage />;
+
+  return <ViveresApp />;
 }
