@@ -1609,11 +1609,23 @@ function LoginPage() {
       .login-left-integra-img{height:200px;max-width:90vw}
       .login-left-line{margin:16px auto}
       .login-left-sub{max-width:100%}
-      .login-right{width:100%;padding:24px 20px 48px;display:flex;justify-content:center;align-items:flex-start}
-      .login-card{width:min(420px,92vw);max-width:420px;margin:0 auto;padding:28px 24px}
+      /* Optical Centering Rule — DS §11.12 */
+      /* El contenedor centra óptica y geométricamente el card */
+      .login-right{width:100%;padding:32px 28px 56px;display:flex;justify-content:center;align-items:flex-start}
+      /* El card ocupa 80vw máx — márgenes claramente visibles en todos los viewports */
+      .login-card{width:min(340px,80vw);max-width:340px;margin:0 auto;padding:32px 28px}
+    }
+    @media(max-width:430px){
+      /* 430px: card ≈ 344px → margen ~43px c/lado */
+      .login-card{width:min(340px,80vw)}
+    }
+    @media(max-width:414px){
+      /* 414px: card ≈ 331px → margen ~41px c/lado */
+      .login-card{width:min(332px,80vw)}
     }
     @media(max-width:390px){
-      .login-card{padding:24px 20px}
+      /* 390px: card ≈ 312px → margen ~39px c/lado */
+      .login-card{width:min(312px,80vw);padding:28px 24px}
     }
   `;
 
