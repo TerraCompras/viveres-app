@@ -197,7 +197,7 @@ tr.click:hover td{background:var(--surface2);cursor:pointer}
 .flex-gap{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .flex-between{display:flex;justify-content:space-between;align-items:center}
 .mt8{margin-top:8px}.mt12{margin-top:12px}.mt16{margin-top:16px}
-.mb8{margin-bottom:8px}.mb12{margin-bottom:12px}
+.mb8{margin-bottom:8px}.mb12{margin-bottom:12px}.mb16{margin-bottom:16px}
 .text-mono{font-family:var(--mono)}.text-muted{color:var(--muted)}
 .empty-state{text-align:center;padding:48px 20px;color:var(--muted);font-size:13px}
 .loading{display:flex;align-items:center;justify-content:center;padding:48px;color:var(--muted);gap:10px;font-size:13px}
@@ -221,60 +221,64 @@ tr.click:hover td{background:var(--surface2);cursor:pointer}
 .fecha-step.done .fecha-step-label{color:#065F46}
 .fecha-step.done .fecha-step-val{color:#065F46}
 .fecha-arrow{display:flex;align-items:center;color:var(--muted2);font-size:18px;flex-shrink:0}
+
+.info-box.danger{border-left:3px solid var(--danger);background:#FEF2F2}
+.mb16{margin-bottom:16px}
 .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px}
 .stat{background:var(--surface);border:1px solid var(--border);border-radius:var(--r2);padding:14px 18px;box-shadow:0 1px 4px rgba(33,51,99,.06)}
 .stat-label{font-size:10px;color:var(--muted);font-weight:600;letter-spacing:.5px;text-transform:uppercase;margin-bottom:6px}
 .stat-value{font-family:var(--mono);font-size:28px;font-weight:700}
 .req-row-actions{display:flex;flex-direction:row;gap:6px;margin-top:10px;padding-top:10px;border-top:1px solid var(--border);justify-content:flex-end}
-.mb16{margin-bottom:16px}
-.form-footer-actions{display:flex;gap:8px;align-items:center;justify-content:flex-end}
-.form-step2-bar{left:235px !important}
+.form-footer-actions{display:flex;gap:8px;align-items:center;justify-content:flex-end;border-top:1px solid var(--border);padding-top:14px;margin-top:16px}
+.fixed-action-bar{position:fixed;bottom:0;left:235px;right:0;background:var(--navy);border-top:2px solid rgba(255,255,255,.15);padding:12px 28px;display:flex;align-items:center;gap:16px;z-index:50}
 .manual-grid-3{display:grid;grid-template-columns:1fr 1fr 2fr;gap:10px;margin-bottom:10px}
-.manual-grid-5{display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr;gap:10px;align-items:end}
+.manual-grid-5{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;align-items:end}
 
 /* ── RESPONSIVE MOBILE ── */
 @media (max-width: 768px) {
 
-  /* Layout: sidebar se oculta, nav pasa abajo */
+  /* Layout */
   .app { flex-direction: column; }
   .sidebar { display: none; }
   .main { width: 100%; padding-bottom: 72px; }
 
-  /* Topbar mobile */
+  /* Topbar */
   .topbar { padding: 10px 16px; }
   .topbar-title { font-size: 11px; }
 
-  /* Content mobile */
+  /* Content */
   .content { padding: 14px 14px; }
 
   /* Cards */
   .card { padding: 14px; margin-bottom: 12px; }
 
-  /* Formularios: 1 columna en mobile */
+  /* Formularios: 1 columna */
   .form-grid { grid-template-columns: 1fr; gap: 10px; }
   .form-grid-3 { grid-template-columns: 1fr; gap: 10px; }
 
-  /* Tablas: scroll horizontal */
+  /* Tablas: scroll horizontal contenido */
   .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
   table { font-size: 11px; min-width: 500px; }
   th, td { padding: 7px 8px; }
+  .items-edit table { min-width: 380px; }
 
-  /* Filtros: columna en mobile */
+  /* Filtros: columna */
   .filter-row { flex-direction: column; align-items: stretch; }
   .filter-input, .filter-select { min-width: unset; width: 100%; }
   .filter-row .btn { width: 100%; justify-content: center; }
 
-  /* Botones */
-  .btn { font-size: 11px; padding: 8px 12px; }
+  /* Botones base — tap target 44px mínimo */
+  .btn { font-size: 11px; padding: 10px 14px; min-height: 44px; }
+  .btn-sm { padding: 8px 12px; min-height: 36px; }
 
-  /* Modal footer: columna full-width con orden correcto */
+  /* Modal footer: columna DS §10 */
   .mftr { flex-direction: column; align-items: stretch; gap: 6px; }
-  .mftr .btn { width: 100%; justify-content: center; flex: unset; }
+  .mftr .btn { width: 100%; justify-content: center; flex: unset; min-height: 48px; }
   .mftr .btn-success { order: -3; }
   .mftr .btn-primary { order: -2; }
   .mftr .btn-danger  { order: -1; }
 
-  /* Modal full screen en mobile */
+  /* Modal full screen */
   .overlay { padding: 0; align-items: flex-end; }
   .modal { border-radius: 16px 16px 0 0; max-width: 100%; max-height: 92vh; overflow-y: auto; }
   .modal-lg { max-width: 100%; }
@@ -283,13 +287,23 @@ tr.click:hover td{background:var(--surface2);cursor:pointer}
   .req-meta { gap: 8px; }
   .req-title { font-size: 13px; }
 
-  /* Action cards: acciones en columna full-width */
-  .req-row-actions { flex-direction: column; width: 100%; }
-  .req-row-actions .btn { width: 100%; justify-content: center; }
+  /* Action cards: acciones en columna full-width DS §10 */
+  .req-row-actions { flex-direction: column; width: 100%; justify-content: flex-start; }
+  .req-row-actions .btn { width: 100%; justify-content: center; min-height: 48px; }
 
   /* Form footer actions */
   .form-footer-actions { flex-direction: column; align-items: stretch; }
-  .form-footer-actions .btn { width: 100%; justify-content: center; }
+  .form-footer-actions .btn { width: 100%; justify-content: center; min-height: 48px; }
+  .form-footer-actions .btn-primary { order: -2; }
+  .form-footer-actions .btn-success { order: -3; }
+
+  /* Fixed action bar DS §11.3 */
+  .fixed-action-bar { left: 0; bottom: 64px; padding: 10px 14px; flex-direction: column; align-items: stretch; gap: 8px; }
+  .fixed-action-bar .btn { width: 100%; justify-content: center; min-height: 48px; }
+
+  /* Manual grids */
+  .manual-grid-3 { grid-template-columns: 1fr; }
+  .manual-grid-5 { grid-template-columns: 1fr 1fr; }
 
   /* Dieta grid */
   .dieta-grid { grid-template-columns: 1fr; }
@@ -302,25 +316,20 @@ tr.click:hover td{background:var(--surface2);cursor:pointer}
   .tabs-row { overflow-x: auto; -webkit-overflow-scrolling: touch; }
   .tab { font-size: 10px; padding: 8px 12px; }
 
-  /* Stats: 2 columnas en mobile */
+  /* Stats: 2 columnas DS §3.6 */
   .stats { grid-template-columns: 1fr 1fr; gap: 8px; }
   .stat { padding: 12px; }
   .stat-value { font-size: 22px; }
 
-  /* Notif: encima del bottom nav */
+  /* Card-title con botón: columna DS §10.6 */
+  .card-title { flex-direction: column; align-items: flex-start; gap: 8px; }
+  .card-title .btn { width: 100%; justify-content: center; }
+
+  /* Notif: encima del bottom-nav */
   .notif { bottom: 80px; right: 10px; left: 10px; max-width: unset; }
 
-  /* Items-edit table */
-  .items-edit table { min-width: 380px; }
-
-  /* Step 2 bottom bar: full width on mobile */
-  .form-step2-bar { left: 0 !important; padding: 10px 14px; flex-direction: column; align-items: stretch; gap: 8px; }
-  .form-step2-bar > div:last-child { flex-wrap: wrap; justify-content: stretch; }
-  .form-step2-bar > div:last-child .btn { flex: 1; justify-content: center; min-width: 120px; }
-
-  /* Manual item grids: collapse to 1 col */
-  .manual-grid-3 { grid-template-columns: 1fr; }
-  .manual-grid-5 { grid-template-columns: 1fr 1fr; }
+  /* Inputs: tap target 44px */
+  .fg input, .fg select { min-height: 44px; }
 }
 
 /* ── BOTTOM NAV (solo mobile) ── */
@@ -346,7 +355,7 @@ tr.click:hover td{background:var(--surface2);cursor:pointer}
   .mobile-nav-badge {
     position: absolute; top: 4px; right: 8px;
     background: var(--danger); color: #fff;
-    font-family: var(--mono); font-size: 9px; font-weight: 700;
+    font-family: var(--mono); font-size: 8px; font-weight: 700;
     padding: 1px 5px; border-radius: 8px; min-width: 16px; text-align: center;
   }
 }
@@ -480,7 +489,7 @@ function FormPedido({ pedidoInicial, catalogoInicial, parametros, onSave, onCanc
       </div>
       <FG label="Observaciones"><textarea value={cabecera.observaciones} onChange={e => setCab("observaciones", e.target.value)} placeholder="Notas adicionales..." /></FG>
       {cabecera.pax > 0 && cabecera.dias > 0 && <div className="info-box accent mt12" style={{ fontSize: 12 }}>Total: <strong>{cabecera.pax} PAX × {cabecera.dias} días = {paxDias} raciones</strong></div>}
-      <div className="form-footer-actions mt16" style={{ borderTop: "1px solid var(--border)", paddingTop: 14 }}>
+      <div className="form-footer-actions mt16">
         <button className="btn btn-ghost" onClick={onCancel}>Cancelar</button>
         <button className="btn btn-primary" onClick={() => { if (!cabecera.base_buque || !cabecera.solicitado_por) { alert("Completá Base/Buque y Solicitado por"); return; } setStep(2); }}>Continuar → Cargar ítems</button>
       </div>
@@ -526,16 +535,14 @@ function FormPedido({ pedidoInicial, catalogoInicial, parametros, onSave, onCanc
         <div style={{ marginBottom: 90 }}>
           <div className="info-box accent mb12" style={{ fontSize: 11 }}>Agregá productos que no están en el catálogo.</div>
           <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
-            <button className="btn btn-primary" onClick={() => setItemsManuales([...itemsManuales, blankManual()])}>
-              + Agregar ítem manual
-            </button>
+            <button className="btn btn-primary" onClick={() => setItemsManuales([...itemsManuales, blankManual()])}>+ Agregar ítem manual</button>
           </div>
           {itemsManuales.length === 0 ? (
             <div className="manual-empty">
               <div style={{ fontSize: 36 }}>✏️</div>
               <div style={{ fontSize: 14, fontWeight: 600, color: "var(--navy)" }}>Sin ítems manuales</div>
               <div style={{ fontSize: 12, color: "var(--muted)" }}>Hacé click en "+ Agregar ítem manual" para agregar productos que no están en el catálogo</div>
-              <button className="btn btn-primary" onClick={() => setItemsManuales([...itemsManuales, blankManual()])}>+ Agregar primer ítem</button>
+              <button className="btn btn-primary mt8" onClick={() => setItemsManuales([...itemsManuales, blankManual()])}>+ Agregar primer ítem</button>
             </div>
           ) : (
             <div>
@@ -610,10 +617,10 @@ function FormPedido({ pedidoInicial, catalogoInicial, parametros, onSave, onCanc
         </div>
       )}
 
-      <div className="form-step2-bar" style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: "var(--navy)", borderTop: "2px solid rgba(255,255,255,.15)", padding: "12px 28px", display: "flex", alignItems: "center", gap: 16, zIndex: 50 }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
+      <div className="fixed-action-bar">
+        <div style={{ flex: 1 }}>
           {itemsConPedido.length === 0 ? <span style={{ fontSize: 12, color: "rgba(255,255,255,.5)" }}>Sin ítems seleccionados</span> :
-            <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+            <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
               {[...new Set(itemsConPedido.map(it => it.categoria))].map(cat => (
                 <div key={cat} style={{ display: "flex", alignItems: "center", gap: 4 }}>
                   <span style={{ fontSize: 10, color: "rgba(255,255,255,.5)" }}>{cat}</span>
@@ -623,7 +630,7 @@ function FormPedido({ pedidoInicial, catalogoInicial, parametros, onSave, onCanc
             </div>
           }
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
           <div style={{ fontSize: 13, fontWeight: 700, color: "#fff", fontFamily: "var(--mono)" }}>{itemsConPedido.length} ítem{itemsConPedido.length !== 1 ? "s" : ""}</div>
           <button className="btn btn-ghost" onClick={() => setStep(1)} style={{ color: "rgba(255,255,255,.7)", borderColor: "rgba(255,255,255,.2)" }}>← Volver</button>
           <button className="btn" onClick={() => handleGuardar("borrador")} disabled={saving} style={{ background: "rgba(255,255,255,.15)", color: "#fff", borderColor: "rgba(255,255,255,.2)" }}>Guardar borrador</button>
@@ -904,7 +911,7 @@ function ModalRevisar({ pedido, onClose, onActualizado, notify }) {
           {/* TAB RECHAZAR */}
           {modo === "rechazar" && (
             <div>
-              <div className="info-box mb12" style={{ fontSize: 12, borderLeft: "3px solid var(--danger)", background: "#FEF2F2" }}>
+              <div className="info-box danger mb12" style={{ fontSize: 12 }}>
                 El pedido quedará registrado como rechazado.
               </div>
               <FG label="Motivo *">
@@ -1218,7 +1225,7 @@ function PageInbox({ notify, onNeedRefresh }) {
                   <div className="flex-gap mb8">
                     <span className="text-mono" style={{ fontSize: 11, color: "var(--accent)" }}>{fmtDate(p.fecha_pedido)}</span>
                     <span className="badge b-blue">Víveres</span>
-                    <span style={{ fontSize: 10, color: "var(--muted)", marginLeft: "auto" }}>Parana Logística</span>
+                    <span style={{ marginLeft: "auto", fontSize: 10, color: "var(--muted)" }}>Parana Logística</span>
                   </div>
                   <div className="req-title">🚢 {p.base_buque} — {p.pax} PAX × {p.dias} días</div>
                   <div className="req-meta">
@@ -1227,9 +1234,9 @@ function PageInbox({ notify, onNeedRefresh }) {
                   </div>
                   <div className="req-row-actions" onClick={e => e.stopPropagation()}>
                     <button
+                      className="btn btn-danger btn-sm"
                       onClick={e => handleEliminar(e, p)}
                       disabled={eliminando === p.id}
-                      className="btn btn-danger btn-sm"
                     >
                       {eliminando === p.id ? "..." : "✕ Eliminar"}
                     </button>
@@ -1258,7 +1265,7 @@ function PageHistorial({ onNuevo, notify }) {
   useEffect(() => { api.getPedidos().then(d => { setPedidos(d); setLoading(false); }); }, []);
   return (
     <div>
-      <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 10, marginBottom: 12, justifyContent: "space-between" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10, marginBottom: 12 }}>
         <div style={{ fontSize: 13, color: "var(--muted)" }}>{pedidos.length} pedidos registrados</div>
         <button className="btn btn-primary btn-sm" onClick={onNuevo}>+ Nuevo pedido</button>
       </div>
@@ -1602,8 +1609,11 @@ function LoginPage() {
       .login-left-integra-img{height:200px;max-width:90vw}
       .login-left-line{margin:16px auto}
       .login-left-sub{max-width:100%}
-      .login-right{width:100%;padding:32px 24px 48px}
-      .login-card{padding:28px 24px}
+      .login-right{width:100%;padding:24px 20px 48px;display:flex;justify-content:center;align-items:flex-start}
+      .login-card{width:min(420px,92vw);max-width:420px;margin:0 auto;padding:28px 24px}
+    }
+    @media(max-width:390px){
+      .login-card{padding:24px 20px}
     }
   `;
 
