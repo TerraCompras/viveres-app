@@ -1958,69 +1958,70 @@ function PagePivot() {
                 </tr>
               </thead>
               <tbody>
-                {filaKeys.map(fk=>{
+                {filaKeys.flatMap(fk => {
                   const tot = totalFila(fk);
-                  const barPct = Math.min(tot/maxTotal,1);
+                  const barPct = Math.min(tot/maxTotal, 1);
                   const isExp = !!expandidos[fk];
                   const canExpand = filas !== "item";
                   const subData = isExp ? buildSubFilas(fk) : null;
 
-                  const rows = [];
-                  rows.push(
+                  const mainRow = (
                     <tr
                       key={fk}
                       style={{cursor:canExpand?"pointer":"default", borderBottom:"1px solid var(--border)"}}
                       onClick={()=>canExpand&&setExpandidos(prev=>({...prev,[fk]:!prev[fk]}))}
                     >
-                        <td style={{padding:"8px 12px",background:"var(--surface)",position:"sticky",left:0,zIndex:2,borderRight:"1px solid var(--border)"}}>
-                          <div style={{display:"flex",alignItems:"center",gap:7}}>
-                            {canExpand && <span style={{color:"var(--muted2)",fontSize:10,width:10,flexShrink:0}}>{isExp?"▼":"▶"}</span>}
-                            <div style={{flex:1,minWidth:0}}>
-                              <div style={{fontWeight:600,fontSize:12,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{fk}</div>
-                              <div style={{marginTop:3,height:2,borderRadius:1,background:"var(--border)"}}>
-                                <div style={{height:"100%",width:`${barPct*100}%`,background:"var(--accent)",borderRadius:1}}/>
-                              </div>
+                      <td style={{padding:"8px 12px",background:"var(--surface)",position:"sticky",left:0,zIndex:2,borderRight:"1px solid var(--border)"}}>
+                        <div style={{display:"flex",alignItems:"center",gap:7}}>
+                          {canExpand && <span style={{color:"var(--muted2)",fontSize:10,width:10,flexShrink:0}}>{isExp?"▼":"▶"}</span>}
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{fontWeight:600,fontSize:12,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{fk}</div>
+                            <div style={{marginTop:3,height:2,borderRadius:1,background:"var(--border)"}}>
+                              <div style={{height:"100%",width:`${barPct*100}%`,background:"var(--accent)",borderRadius:1}}/>
                             </div>
                           </div>
-                        </td>
-                        {colKeys.map(ck=>{
-                          const v = tabla.get(fk)?.get(ck)||0;
-                          return (
-                            <td key={ck} style={{padding:"7px 10px",textAlign:"right",background:heatBg(v,maxCell),borderBottom:"1px solid var(--border)"}}>
-                              {fmtVal(v)}
-                            </td>
-                          );
-                        })}
-                        <td style={{padding:"7px 10px",textAlign:"right",fontWeight:700,background:"#F0F4F8",position:"sticky",right:0,borderLeft:"1px solid var(--border)"}}>
-                          {fmtVal(tot)}
-                        </td>
-                      </tr>
+                        </div>
+                      </td>
+                      {colKeys.map(ck => {
+                        const v = tabla.get(fk)?.get(ck)||0;
+                        return (
+                          <td key={ck} style={{padding:"7px 10px",textAlign:"right",background:heatBg(v,maxCell),borderBottom:"1px solid var(--border)"}}>
+                            {fmtVal(v)}
+                          </td>
+                        );
+                      })}
+                      <td style={{padding:"7px 10px",textAlign:"right",fontWeight:700,background:"#F0F4F8",position:"sticky",right:0,borderLeft:"1px solid var(--border)"}}>
+                        {fmtVal(tot)}
+                      </td>
+                    </tr>
+                  );
 
-                  if (isExp && subData) {
-                    subData.keys.forEach(sk => {
-                      const sTot = [...(subData.map.get(sk)?.values()||[])].reduce((s,v)=>s+v,0);
-                      rows.push(
-                        <tr key={`${fk}__${sk}`} style={{background:"#FAFBFD",borderBottom:"1px solid var(--border)"}}>
-                          <td style={{padding:"5px 12px 5px 36px",position:"sticky",left:0,background:"#FAFBFD",borderRight:"1px solid var(--border)"}}>
-                            <span style={{fontSize:11,color:"var(--text)"}}>↳ </span>
-                            <span style={{fontSize:11,color:"var(--text)",fontWeight:500}}>{sk}</span>
-                          </td>
-                          {colKeys.map(ck=>{
-                            const v = subData.map.get(sk)?.get(ck)||0;
-                            return (
-                              <td key={ck} style={{padding:"5px 10px",textAlign:"right",fontSize:11,background:v?heatBg(v,maxCell*0.5):"transparent"}}>
-                                {fmtVal(v)}
-                              </td>
-                            );
-                          })}
-                          <td style={{padding:"5px 10px",textAlign:"right",fontWeight:600,fontSize:11,background:"#F0F4F8",position:"sticky",right:0,borderLeft:"1px solid var(--border)"}}>
-                            {fmtVal(sTot)}
-                          </td>
-                        </tr>
-                      );
-                    });
-                  }
-                  return rows;
+                  const subRows = (isExp && subData)
+                    ? subData.keys.map(sk => {
+                        const sTot = [...(subData.map.get(sk)?.values()||[])].reduce((s,v)=>s+v,0);
+                        return (
+                          <tr key={`${fk}__${sk}`} style={{background:"#FAFBFD",borderBottom:"1px solid var(--border)"}}>
+                            <td style={{padding:"5px 12px 5px 36px",position:"sticky",left:0,background:"#FAFBFD",borderRight:"1px solid var(--border)"}}>
+                              <span style={{fontSize:11,color:"var(--text)"}}>↳ </span>
+                              <span style={{fontSize:11,color:"var(--text)",fontWeight:500}}>{sk}</span>
+                            </td>
+                            {colKeys.map(ck => {
+                              const v = subData.map.get(sk)?.get(ck)||0;
+                              return (
+                                <td key={ck} style={{padding:"5px 10px",textAlign:"right",fontSize:11,background:v?heatBg(v,maxCell*0.5):"transparent"}}>
+                                  {fmtVal(v)}
+                                </td>
+                              );
+                            })}
+                            <td style={{padding:"5px 10px",textAlign:"right",fontWeight:600,fontSize:11,background:"#F0F4F8",position:"sticky",right:0,borderLeft:"1px solid var(--border)"}}>
+                              {fmtVal(sTot)}
+                            </td>
+                          </tr>
+                        );
+                      })
+                    : [];
+
+                  return [mainRow, ...subRows];
                 })}
               </tbody>
               <tfoot>
