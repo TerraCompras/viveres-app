@@ -1690,18 +1690,28 @@ function PagePivot() {
   const [filtHasta,  setFiltHasta]  = useState("");
   const [busqueda,   setBusqueda]   = useState("");
   const [expandidos, setExpandidos] = useState({});
+  // ── Multi-selección de pedidos ───────────────────────────────────────────
+  const [seleccionados, setSeleccionados] = useState(new Set()); // Set de ids
+  const [modoSel, setModoSel] = useState(false); // false = todos los pedidos filtrados
 
   useEffect(() => {
     api.getPedidos({}).then(d => { setPedidos(d); setLoading(false); }).catch(e => { setError(e.message); setLoading(false); });
   }, []);
 
-  const pedidosFilt = useMemo(() => pedidos.filter(p => {
+  const pedidosBase = useMemo(() => pedidos.filter(p => {
     if (filtBuque  && p.base_buque !== filtBuque)  return false;
     if (filtEstado && p.status     !== filtEstado)  return false;
     if (filtDesde  && (p.fecha_pedido||"") < filtDesde) return false;
     if (filtHasta  && (p.fecha_pedido||"") > filtHasta) return false;
     return true;
   }), [pedidos, filtBuque, filtEstado, filtDesde, filtHasta]);
+
+  // Si modoSel activo, solo los marcados; si no, todos los filtrados
+  const pedidosFilt = useMemo(() =>
+    modoSel && seleccionados.size > 0
+      ? pedidosBase.filter(p => seleccionados.has(p.id))
+      : pedidosBase,
+  [pedidosBase, modoSel, seleccionados]);
 
   const buques  = useMemo(() => [...new Set(pedidos.map(p => p.base_buque).filter(Boolean))].sort(), [pedidos]);
   const estados = useMemo(() => [...new Set(pedidos.map(p => p.status).filter(Boolean))].sort(), [pedidos]);
@@ -1807,7 +1817,69 @@ function PagePivot() {
 
   return (
     <div>
-      {/* Controles */}
+      {/* ── Selector de pedidos ── */}
+      <div className="card" style={{marginBottom:14}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom: modoSel ? 10 : 0}}>
+          <div style={{fontWeight:700,fontSize:13,color:"var(--navy)"}}>
+            📋 Pedidos a analizar
+            <span style={{fontWeight:400,fontSize:11,color:"var(--muted)",marginLeft:8}}>
+              {modoSel && seleccionados.size > 0
+                ? `${seleccionados.size} pedido${seleccionados.size>1?"s":""} seleccionado${seleccionados.size>1?"s":""}`
+                : `${pedidosBase.length} pedido${pedidosBase.length!==1?"s":""} (todos los filtrados)`}
+            </span>
+          </div>
+          <div style={{display:"flex",gap:6}}>
+            {modoSel && seleccionados.size > 0 &&
+              <button className="btn btn-ghost btn-sm" onClick={()=>setSeleccionados(new Set())}>Limpiar selección</button>
+            }
+            <button
+              className={`btn btn-sm ${modoSel ? "btn-primary" : "btn-ghost"}`}
+              onClick={()=>{ setModoSel(v=>!v); if(modoSel) setSeleccionados(new Set()); }}
+            >
+              {modoSel ? "✓ Selección activa" : "Seleccionar pedidos"}
+            </button>
+          </div>
+        </div>
+
+        {modoSel && (
+          <div>
+            <div style={{display:"flex",gap:6,marginBottom:8}}>
+              <button className="btn btn-ghost btn-sm" onClick={()=>setSeleccionados(new Set(pedidosBase.map(p=>p.id)))}>Seleccionar todos</button>
+              <button className="btn btn-ghost btn-sm" onClick={()=>setSeleccionados(new Set())}>Deseleccionar todos</button>
+            </div>
+            <div style={{maxHeight:220,overflowY:"auto",display:"flex",flexDirection:"column",gap:4}}>
+              {pedidosBase.map(p => {
+                const checked = seleccionados.has(p.id);
+                const itemsCnt = (p.viveres_pedido_items||[]).filter(it=>(it.cantidad_pedida||0)>0).length;
+                return (
+                  <label key={p.id} style={{display:"flex",alignItems:"center",gap:10,padding:"7px 10px",borderRadius:6,border:`1px solid ${checked?"var(--accent)":"var(--border)"}`,background:checked?"#EFF6FF":"var(--surface)",cursor:"pointer",transition:"all .12s"}}>
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={()=>setSeleccionados(prev=>{
+                        const next = new Set(prev);
+                        checked ? next.delete(p.id) : next.add(p.id);
+                        return next;
+                      })}
+                      style={{width:"auto",accentColor:"var(--accent)"}}
+                    />
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                        <span style={{fontWeight:600,fontSize:12}}>{p.base_buque || "Sin buque"}</span>
+                        <span style={{fontSize:11,color:"var(--muted)",fontFamily:"var(--mono)"}}>{(p.fecha_pedido||"").slice(0,10)}</span>
+                        <span style={{fontSize:10,padding:"1px 6px",borderRadius:4,background:"#DBEAFE",color:"#1E40AF",fontWeight:600}}>{p.pax} PAX · {p.dias} días</span>
+                        {p.solicitado_por && <span style={{fontSize:10,color:"var(--muted)"}}>{p.solicitado_por}</span>}
+                      </div>
+                    </div>
+                    <span style={{fontSize:10,color:"var(--muted)",whiteSpace:"nowrap"}}>{itemsCnt} ítems</span>
+                  </label>
+                );
+              })}
+              {pedidosBase.length === 0 && <div style={{fontSize:12,color:"var(--muted)",padding:"8px 0"}}>Sin pedidos para los filtros actuales</div>}
+            </div>
+          </div>
+        )}
+      </div>
       <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:12, marginBottom:14 }}>
         {[[FILA_OPT,"filas",setFilas,filas,"Filas — agrupar por"],[COL_OPT,"columnas",setColumnas,columnas,"Columnas — normalizar"],[MET_OPT,"metrica",setMetrica,metrica,"Métrica"]].map(([opts,name,setter,val,titulo]) => (
           <div key={name} className="card" style={{padding:"12px 14px"}}>
@@ -1893,13 +1965,13 @@ function PagePivot() {
                   const canExpand = filas !== "item";
                   const subData = isExp ? buildSubFilas(fk) : null;
 
-                  return (
-                    <React.Fragment key={fk}>
-                      <tr
-                        style={{cursor:canExpand?"pointer":"default", borderBottom:"1px solid var(--border)"}}
-                        onClick={()=>canExpand&&setExpandidos(prev=>({...prev,[fk]:!prev[fk]}))}
-                        className="pivot-main-row"
-                      >
+                  const rows = [];
+                  rows.push(
+                    <tr
+                      key={fk}
+                      style={{cursor:canExpand?"pointer":"default", borderBottom:"1px solid var(--border)"}}
+                      onClick={()=>canExpand&&setExpandidos(prev=>({...prev,[fk]:!prev[fk]}))}
+                    >
                         <td style={{padding:"8px 12px",background:"var(--surface)",position:"sticky",left:0,zIndex:2,borderRight:"1px solid var(--border)"}}>
                           <div style={{display:"flex",alignItems:"center",gap:7}}>
                             {canExpand && <span style={{color:"var(--muted2)",fontSize:10,width:10,flexShrink:0}}>{isExp?"▼":"▶"}</span>}
@@ -1924,31 +1996,31 @@ function PagePivot() {
                         </td>
                       </tr>
 
-                      {/* Desglose de ítems */}
-                      {isExp && subData && subData.keys.map(sk=>{
-                        const sTot = [...(subData.map.get(sk)?.values()||[])].reduce((s,v)=>s+v,0);
-                        return (
-                          <tr key={`${fk}__${sk}`} style={{background:"#FAFBFD",borderBottom:"1px solid var(--border)"}}>
-                            <td style={{padding:"5px 12px 5px 36px",position:"sticky",left:0,background:"#FAFBFD",borderRight:"1px solid var(--border)"}}>
-                              <span style={{fontSize:11,color:"var(--text)"}}>↳ </span>
-                              <span style={{fontSize:11,color:"var(--text)",fontWeight:500}}>{sk}</span>
-                            </td>
-                            {colKeys.map(ck=>{
-                              const v = subData.map.get(sk)?.get(ck)||0;
-                              return (
-                                <td key={ck} style={{padding:"5px 10px",textAlign:"right",fontSize:11,background:v?heatBg(v,maxCell*0.5):"transparent"}}>
-                                  {fmtVal(v)}
-                                </td>
-                              );
-                            })}
-                            <td style={{padding:"5px 10px",textAlign:"right",fontWeight:600,fontSize:11,background:"#F0F4F8",position:"sticky",right:0,borderLeft:"1px solid var(--border)"}}>
-                              {fmtVal(sTot)}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </React.Fragment>
-                  );
+                  if (isExp && subData) {
+                    subData.keys.forEach(sk => {
+                      const sTot = [...(subData.map.get(sk)?.values()||[])].reduce((s,v)=>s+v,0);
+                      rows.push(
+                        <tr key={`${fk}__${sk}`} style={{background:"#FAFBFD",borderBottom:"1px solid var(--border)"}}>
+                          <td style={{padding:"5px 12px 5px 36px",position:"sticky",left:0,background:"#FAFBFD",borderRight:"1px solid var(--border)"}}>
+                            <span style={{fontSize:11,color:"var(--text)"}}>↳ </span>
+                            <span style={{fontSize:11,color:"var(--text)",fontWeight:500}}>{sk}</span>
+                          </td>
+                          {colKeys.map(ck=>{
+                            const v = subData.map.get(sk)?.get(ck)||0;
+                            return (
+                              <td key={ck} style={{padding:"5px 10px",textAlign:"right",fontSize:11,background:v?heatBg(v,maxCell*0.5):"transparent"}}>
+                                {fmtVal(v)}
+                              </td>
+                            );
+                          })}
+                          <td style={{padding:"5px 10px",textAlign:"right",fontWeight:600,fontSize:11,background:"#F0F4F8",position:"sticky",right:0,borderLeft:"1px solid var(--border)"}}>
+                            {fmtVal(sTot)}
+                          </td>
+                        </tr>
+                      );
+                    });
+                  }
+                  return rows;
                 })}
               </tbody>
               <tfoot>
