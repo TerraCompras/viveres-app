@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import * as XLSX from "xlsx";
 import { supabase } from "./lib/supabase";
 
@@ -1676,6 +1676,307 @@ function LoginPage() {
 }
 
 // ─── ROOT APP ─────────────────────────────────────────────────────────────────
+// ─── PAGE PIVOT ──────────────────────────────────────────────────────────────
+function PagePivot() {
+  const [pedidos,    setPedidos]    = useState([]);
+  const [loading,    setLoading]    = useState(true);
+  const [error,      setError]      = useState(null);
+  const [filas,      setFilas]      = useState("categoria");
+  const [columnas,   setColumnas]   = useState("pedido");
+  const [metrica,    setMetrica]    = useState("cantidad");
+  const [filtBuque,  setFiltBuque]  = useState("");
+  const [filtEstado, setFiltEstado] = useState("");
+  const [filtDesde,  setFiltDesde]  = useState("");
+  const [filtHasta,  setFiltHasta]  = useState("");
+  const [busqueda,   setBusqueda]   = useState("");
+  const [expandidos, setExpandidos] = useState({});
+
+  useEffect(() => {
+    api.getPedidos({}).then(d => { setPedidos(d); setLoading(false); }).catch(e => { setError(e.message); setLoading(false); });
+  }, []);
+
+  const pedidosFilt = useMemo(() => pedidos.filter(p => {
+    if (filtBuque  && p.base_buque !== filtBuque)  return false;
+    if (filtEstado && p.status     !== filtEstado)  return false;
+    if (filtDesde  && (p.fecha_pedido||"") < filtDesde) return false;
+    if (filtHasta  && (p.fecha_pedido||"") > filtHasta) return false;
+    return true;
+  }), [pedidos, filtBuque, filtEstado, filtDesde, filtHasta]);
+
+  const buques  = useMemo(() => [...new Set(pedidos.map(p => p.base_buque).filter(Boolean))].sort(), [pedidos]);
+  const estados = useMemo(() => [...new Set(pedidos.map(p => p.status).filter(Boolean))].sort(), [pedidos]);
+
+  // ── Motor pivot ─────────────────────────────────────────────────────────────
+  const { tabla, filaKeys, colKeys } = useMemo(() => {
+    const map = new Map();
+    const eventos = [];
+
+    pedidosFilt.forEach(p => {
+      const pax = p.pax || 1, dias = p.dias || 1, paxDias = pax * dias;
+      const colKey = columnas === "pedido"
+        ? `${(p.fecha_pedido||"—").slice(0,10)} · ${p.base_buque||"?"}`
+        : p.base_buque || "Sin buque";
+
+      (p.viveres_pedido_items || []).filter(it => (it.cantidad_pedida||0) > 0).forEach(it => {
+        const base = metrica === "volumen"
+          ? (it.cantidad_pedida||0) * (it.volumen_peso||1)
+          : (it.cantidad_pedida||0);
+        const valor = columnas === "dia" ? base / dias : columnas === "pax_dia" ? base / paxDias : base;
+
+        const filaKey = filas === "item"         ? (it.descripcion   || "—")
+                      : filas === "subcategoria" ? (it.subcategoria  || "Sin subcategoría")
+                      : filas === "buque"        ? (p.base_buque     || "—")
+                      :                           (it.categoria      || "Sin categoría");
+
+        if (busqueda && !filaKey.toLowerCase().includes(busqueda.toLowerCase()) &&
+            !(it.descripcion||"").toLowerCase().includes(busqueda.toLowerCase())) return;
+
+        if (!map.has(filaKey)) map.set(filaKey, new Map());
+        const row = map.get(filaKey);
+        row.set(colKey, (row.get(colKey)||0) + valor);
+        eventos.push({ filaKey, colKey, it, p, valor });
+      });
+    });
+
+    const filaKeys = [...map.keys()].sort((a,b) => {
+      const tA = [...map.get(a).values()].reduce((s,v)=>s+v,0);
+      const tB = [...map.get(b).values()].reduce((s,v)=>s+v,0);
+      return tB - tA;
+    });
+    const colSet = new Set(); eventos.forEach(e => colSet.add(e.colKey));
+    const colKeys = [...colSet].sort();
+    return { tabla: map, filaKeys, colKeys };
+  }, [pedidosFilt, filas, columnas, metrica, busqueda]);
+
+  // ── Desglose por ítem dentro de una fila ────────────────────────────────────
+  const buildSubFilas = useCallback((fk) => {
+    const subMap = new Map();
+    pedidosFilt.forEach(p => {
+      const pax = p.pax||1, dias = p.dias||1, paxDias = pax*dias;
+      const colKey = columnas === "pedido"
+        ? `${(p.fecha_pedido||"—").slice(0,10)} · ${p.base_buque||"?"}`
+        : p.base_buque || "Sin buque";
+      (p.viveres_pedido_items||[]).filter(it => {
+        if ((it.cantidad_pedida||0) <= 0) return false;
+        if (filas === "categoria"    && (it.categoria    ||"Sin categoría")    !== fk) return false;
+        if (filas === "subcategoria" && (it.subcategoria ||"Sin subcategoría") !== fk) return false;
+        if (filas === "buque"        && (p.base_buque    ||"—")               !== fk) return false;
+        return true;
+      }).forEach(it => {
+        const base = metrica === "volumen" ? (it.cantidad_pedida||0)*(it.volumen_peso||1) : (it.cantidad_pedida||0);
+        const valor = columnas === "dia" ? base/dias : columnas === "pax_dia" ? base/paxDias : base;
+        const desc = it.descripcion || "—";
+        if (!subMap.has(desc)) subMap.set(desc, new Map());
+        subMap.get(desc).set(colKey, (subMap.get(desc).get(colKey)||0) + valor);
+      });
+    });
+    const subKeys = [...subMap.keys()].sort((a,b) => {
+      const tA = [...(subMap.get(a)?.values()||[])].reduce((s,v)=>s+v,0);
+      const tB = [...(subMap.get(b)?.values()||[])].reduce((s,v)=>s+v,0);
+      return tB - tA;
+    });
+    return { map: subMap, keys: subKeys };
+  }, [pedidosFilt, filas, columnas, metrica]);
+
+  // ── Helpers ──────────────────────────────────────────────────────────────────
+  const totalFila = (fk) => [...(tabla.get(fk)?.values()||[])].reduce((s,v)=>s+v,0);
+  const maxTotal  = useMemo(() => Math.max(1, ...filaKeys.map(f => totalFila(f))), [filaKeys, tabla]);
+  const maxCell   = useMemo(() => { let m=1; filaKeys.forEach(fk => colKeys.forEach(ck => { const v=tabla.get(fk)?.get(ck)||0; if(v>m) m=v; })); return m; }, [filaKeys,colKeys,tabla]);
+
+  const heatBg = (v, max) => {
+    if (!v) return "transparent";
+    const pct = Math.min(v/max, 1);
+    return `rgba(35,92,150,${0.07 + pct * 0.28})`;
+  };
+
+  const fmtVal = (v) => {
+    if (!v || v < 0.0001) return <span style={{ color:"var(--muted2)", fontSize:11 }}>—</span>;
+    const sfx = metrica==="volumen" ? " kg" : columnas==="dia" ? "/día" : columnas==="pax_dia" ? "/p·d" : "";
+    const num  = v < 0.01 ? v.toFixed(4) : v < 10 ? v.toFixed(2) : v % 1 === 0 ? v.toFixed(0) : v.toFixed(1);
+    return <span style={{ fontFamily:"var(--mono)", fontSize:12, fontWeight:600 }}>{num}<span style={{ fontSize:9, color:"var(--muted)", marginLeft:1 }}>{sfx}</span></span>;
+  };
+
+  const totalGlobal = filaKeys.reduce((s,f)=>s+totalFila(f),0);
+
+  if (loading) return <div className="state-empty">Cargando historial de pedidos...</div>;
+  if (error)   return <div className="state-empty" style={{color:"var(--danger)"}}>Error: {error}</div>;
+
+  const FILA_OPT = [{v:"categoria",l:"Categoría"},{v:"item",l:"Ítem"},{v:"subcategoria",l:"Subcategoría"},{v:"buque",l:"Buque"}];
+  const COL_OPT  = [{v:"pedido",l:"Total por pedido"},{v:"dia",l:"Promedio por día"},{v:"pax_dia",l:"Por pax·día"}];
+  const MET_OPT  = [{v:"cantidad",l:"Cantidad (unidades)"},{v:"volumen",l:"Volumen analítico (kg)"}];
+
+  return (
+    <div>
+      {/* Controles */}
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:12, marginBottom:14 }}>
+        {[[FILA_OPT,"filas",setFilas,filas,"Filas — agrupar por"],[COL_OPT,"columnas",setColumnas,columnas,"Columnas — normalizar"],[MET_OPT,"metrica",setMetrica,metrica,"Métrica"]].map(([opts,name,setter,val,titulo]) => (
+          <div key={name} className="card" style={{padding:"12px 14px"}}>
+            <div style={{fontSize:10,color:"var(--muted)",fontWeight:700,textTransform:"uppercase",letterSpacing:".5px",marginBottom:8}}>{titulo}</div>
+            {opts.map(o => (
+              <label key={o.v} style={{display:"flex",alignItems:"center",gap:7,fontSize:12,cursor:"pointer",padding:"3px 0"}}>
+                <input type="radio" name={name} value={o.v} checked={val===o.v} onChange={()=>{setter(o.v); if(name==="filas") setExpandidos({});}} style={{width:"auto",accentColor:"var(--accent)"}} />
+                {o.l}
+              </label>
+            ))}
+          </div>
+        ))}
+      </div>
+
+      {/* Filtros */}
+      <div className="filter-row" style={{marginBottom:14}}>
+        <select value={filtBuque} onChange={e=>setFiltBuque(e.target.value)} style={{minWidth:160}}>
+          <option value="">Todos los buques</option>
+          {buques.map(b=><option key={b}>{b}</option>)}
+        </select>
+        <select value={filtEstado} onChange={e=>setFiltEstado(e.target.value)} style={{minWidth:140}}>
+          <option value="">Todos los estados</option>
+          {estados.map(s=><option key={s}>{s}</option>)}
+        </select>
+        <input type="date" value={filtDesde} onChange={e=>setFiltDesde(e.target.value)} style={{width:140}} />
+        <span style={{fontSize:11,color:"var(--muted)"}}>→</span>
+        <input type="date" value={filtHasta} onChange={e=>setFiltHasta(e.target.value)} style={{width:140}} />
+        <input value={busqueda} onChange={e=>setBusqueda(e.target.value)} placeholder="Buscar ítem / categoría..." style={{flex:1,minWidth:160}} />
+        {(filtBuque||filtEstado||filtDesde||filtHasta||busqueda) && (
+          <button className="btn btn-ghost btn-sm" onClick={()=>{setFiltBuque("");setFiltEstado("");setFiltDesde("");setFiltHasta("");setBusqueda("");}}>✕ Limpiar</button>
+        )}
+      </div>
+
+      {/* KPIs rápidos */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,marginBottom:14}}>
+        {[
+          {l:"Pedidos",       v:pedidosFilt.length},
+          {l:"Filas",         v:filaKeys.length},
+          {l:"Columnas",      v:colKeys.length},
+          {l:"Total acum.",   v:(totalGlobal%(1)===0?totalGlobal.toFixed(0):totalGlobal.toFixed(1))+(metrica==="volumen"?" kg":" u")},
+        ].map(k=>(
+          <div key={k.l} className="card" style={{padding:"10px 14px"}}>
+            <div style={{fontSize:10,color:"var(--muted)",fontWeight:700,textTransform:"uppercase",letterSpacing:".5px",marginBottom:3}}>{k.l}</div>
+            <div style={{fontSize:20,fontWeight:800,fontFamily:"var(--mono)",color:"var(--navy)"}}>{k.v}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Tabla pivot */}
+      {filaKeys.length === 0
+        ? <div className="state-empty">Sin datos para los filtros seleccionados</div>
+        : (
+        <div className="card">
+          <div className="card-title" style={{fontSize:12}}>
+            {FILA_OPT.find(o=>o.v===filas)?.l}
+            <span style={{fontWeight:400,color:"var(--muted)",margin:"0 6px"}}>×</span>
+            {COL_OPT.find(o=>o.v===columnas)?.l}
+            <span style={{fontWeight:400,color:"var(--muted)",fontSize:11,marginLeft:8}}>· {MET_OPT.find(o=>o.v===metrica)?.l}</span>
+            <span style={{fontWeight:400,color:"var(--muted2)",fontSize:10,marginLeft:8}}>({filaKeys.length} filas · {colKeys.length} col.)</span>
+          </div>
+          <div className="table-wrap" style={{maxHeight:580,overflowX:"auto",overflowY:"auto"}}>
+            <table style={{borderCollapse:"collapse",fontSize:12,minWidth:"100%"}}>
+              <thead>
+                <tr style={{position:"sticky",top:0,zIndex:4}}>
+                  <th style={{minWidth:220,textAlign:"left",padding:"8px 12px",background:"#1A2A46",color:"#fff",fontWeight:700,fontSize:11,letterSpacing:".4px",textTransform:"uppercase",position:"sticky",left:0,zIndex:5}}>
+                    {FILA_OPT.find(o=>o.v===filas)?.l}
+                  </th>
+                  {colKeys.map(ck=>(
+                    <th key={ck} title={ck} style={{minWidth:120,textAlign:"right",padding:"8px 10px",background:"#1A2A46",color:"rgba(255,255,255,.7)",fontWeight:600,fontSize:10,letterSpacing:".3px",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:150}}>
+                      {ck.length>18?ck.slice(0,18)+"…":ck}
+                    </th>
+                  ))}
+                  <th style={{minWidth:100,textAlign:"right",padding:"8px 10px",background:"#0B1629",color:"var(--gold-light,#D4AA3A)",fontWeight:800,fontSize:11,letterSpacing:".4px",textTransform:"uppercase",position:"sticky",right:0}}>
+                    TOTAL
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {filaKeys.map(fk=>{
+                  const tot = totalFila(fk);
+                  const barPct = Math.min(tot/maxTotal,1);
+                  const isExp = !!expandidos[fk];
+                  const canExpand = filas !== "item";
+                  const subData = isExp ? buildSubFilas(fk) : null;
+
+                  return (
+                    <React.Fragment key={fk}>
+                      <tr
+                        style={{cursor:canExpand?"pointer":"default", borderBottom:"1px solid var(--border)"}}
+                        onClick={()=>canExpand&&setExpandidos(prev=>({...prev,[fk]:!prev[fk]}))}
+                        className="pivot-main-row"
+                      >
+                        <td style={{padding:"8px 12px",background:"var(--surface)",position:"sticky",left:0,zIndex:2,borderRight:"1px solid var(--border)"}}>
+                          <div style={{display:"flex",alignItems:"center",gap:7}}>
+                            {canExpand && <span style={{color:"var(--muted2)",fontSize:10,width:10,flexShrink:0}}>{isExp?"▼":"▶"}</span>}
+                            <div style={{flex:1,minWidth:0}}>
+                              <div style={{fontWeight:600,fontSize:12,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{fk}</div>
+                              <div style={{marginTop:3,height:2,borderRadius:1,background:"var(--border)"}}>
+                                <div style={{height:"100%",width:`${barPct*100}%`,background:"var(--accent)",borderRadius:1}}/>
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                        {colKeys.map(ck=>{
+                          const v = tabla.get(fk)?.get(ck)||0;
+                          return (
+                            <td key={ck} style={{padding:"7px 10px",textAlign:"right",background:heatBg(v,maxCell),borderBottom:"1px solid var(--border)"}}>
+                              {fmtVal(v)}
+                            </td>
+                          );
+                        })}
+                        <td style={{padding:"7px 10px",textAlign:"right",fontWeight:700,background:"#F0F4F8",position:"sticky",right:0,borderLeft:"1px solid var(--border)"}}>
+                          {fmtVal(tot)}
+                        </td>
+                      </tr>
+
+                      {/* Desglose de ítems */}
+                      {isExp && subData && subData.keys.map(sk=>{
+                        const sTot = [...(subData.map.get(sk)?.values()||[])].reduce((s,v)=>s+v,0);
+                        return (
+                          <tr key={`${fk}__${sk}`} style={{background:"#FAFBFD",borderBottom:"1px solid var(--border)"}}>
+                            <td style={{padding:"5px 12px 5px 36px",position:"sticky",left:0,background:"#FAFBFD",borderRight:"1px solid var(--border)"}}>
+                              <span style={{fontSize:11,color:"var(--text)"}}>↳ </span>
+                              <span style={{fontSize:11,color:"var(--text)",fontWeight:500}}>{sk}</span>
+                            </td>
+                            {colKeys.map(ck=>{
+                              const v = subData.map.get(sk)?.get(ck)||0;
+                              return (
+                                <td key={ck} style={{padding:"5px 10px",textAlign:"right",fontSize:11,background:v?heatBg(v,maxCell*0.5):"transparent"}}>
+                                  {fmtVal(v)}
+                                </td>
+                              );
+                            })}
+                            <td style={{padding:"5px 10px",textAlign:"right",fontWeight:600,fontSize:11,background:"#F0F4F8",position:"sticky",right:0,borderLeft:"1px solid var(--border)"}}>
+                              {fmtVal(sTot)}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </React.Fragment>
+                  );
+                })}
+              </tbody>
+              <tfoot>
+                <tr style={{background:"#1A2A46",position:"sticky",bottom:0}}>
+                  <td style={{padding:"8px 12px",color:"#fff",fontWeight:700,fontSize:11,textTransform:"uppercase",letterSpacing:".4px",position:"sticky",left:0,background:"#1A2A46"}}>
+                    TOTAL GENERAL
+                  </td>
+                  {colKeys.map(ck=>{
+                    const colTot = filaKeys.reduce((s,fk)=>s+(tabla.get(fk)?.get(ck)||0),0);
+                    return (
+                      <td key={ck} style={{padding:"8px 10px",textAlign:"right",color:"rgba(255,255,255,.9)"}}>
+                        {fmtVal(colTot)}
+                      </td>
+                    );
+                  })}
+                  <td style={{padding:"8px 10px",textAlign:"right",color:"#D4AA3A",fontWeight:800,position:"sticky",right:0,background:"#0B1629"}}>
+                    {fmtVal(totalGlobal)}
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ViveresApp() {
   const [page, setPage] = useState("inbox");
   const [notif, setNotif] = useState(null);
@@ -1684,7 +1985,7 @@ function ViveresApp() {
   const loadCounts = useCallback(async () => { try { const d = await api.getPedidos({ status: "enviado" }); setInboxCount(d.length); } catch (e) { console.error(e); } }, []);
   useEffect(() => { loadCounts(); }, [loadCounts]);
 
-  const pageTitles = { nuevo: "VÍVERES — NUEVO PEDIDO", inbox: "VÍVERES — INBOX", historial: "VÍVERES — HISTORIAL", catalogo: "VÍVERES — CATÁLOGO", tracker: "VÍVERES — TRACKER" };
+  const pageTitles = { nuevo: "VÍVERES — NUEVO PEDIDO", inbox: "VÍVERES — INBOX", historial: "VÍVERES — HISTORIAL", catalogo: "VÍVERES — CATÁLOGO", tracker: "VÍVERES — TRACKER", pivot: "VÍVERES — ANÁLISIS PIVOT" };
 
   const NI = ({ id, icon, label, badge }) => (
     <div className={`ni ${page === id ? "active" : ""}`} onClick={() => setPage(id)}>
@@ -1710,6 +2011,7 @@ function ViveresApp() {
           <NI id="historial" icon="📋" label="Historial" />
           <NI id="tracker"   icon="📊" label="Tracker" />
           <NI id="catalogo"  icon="📦" label="Catálogo" />
+          <NI id="pivot"     icon="📐" label="Análisis Pivot" />
           <div style={{ flex: 1 }} />
           <div style={{ padding: "12px 18px", borderTop: "1px solid rgba(255,255,255,.1)" }}>
             <div className="ni back" onClick={() => window.location.href = PORTAL_URL}><span className="ni-icon">←</span><span>Volver al portal</span></div>
@@ -1730,6 +2032,7 @@ function ViveresApp() {
             {page === "historial" && <PageHistorial onNuevo={() => setPage("nuevo")} notify={notify} />}
             {page === "tracker"   && <PageTracker notify={notify} />}
             {page === "catalogo"  && <PageCatalogo notify={notify} />}
+            {page === "pivot"     && <PagePivot />}
           </div>
         </div>
       </div>
@@ -1756,6 +2059,10 @@ function ViveresApp() {
         <div className={`mobile-nav-item ${page === "catalogo" ? "active" : ""}`} onClick={() => setPage("catalogo")}>
           <span className="mobile-nav-icon">📦</span>
           <span className="mobile-nav-label">Catálogo</span>
+        </div>
+        <div className={`mobile-nav-item ${page === "pivot" ? "active" : ""}`} onClick={() => setPage("pivot")}>
+          <span className="mobile-nav-icon">📐</span>
+          <span className="mobile-nav-label">Pivot</span>
         </div>
       </nav>
     </>
