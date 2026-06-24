@@ -502,7 +502,7 @@ function FormPedido({ pedidoInicial, catalogoInicial, parametros, onSave, onCanc
         <div className="card" style={{ margin: 0 }}>
           <div className="card-title">Datos del pedido</div>
           <div style={{ fontSize: 13, fontWeight: 600, color: "var(--navy)" }}>{cabecera.base_buque}</div>
-          <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 4 }}>Parana Logística · {cabecera.pax} PAX · {cabecera.dias} días · <strong>{paxDias} raciones</strong></div>
+          <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 4 }}>PL Offshore · {cabecera.pax} PAX · {cabecera.dias} días · <strong>{paxDias} raciones</strong></div>
           <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2 }}>Por: {cabecera.solicitado_por}</div>
           <button className="btn btn-ghost btn-sm mt8" onClick={() => setStep(1)}>← Editar datos</button>
         </div>
@@ -746,7 +746,7 @@ function ModalRevisar({ pedido, onClose, onActualizado, notify }) {
           <div>
             <div className="mtitle">🚢 {pedido.base_buque} — Pedido de Víveres</div>
             <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 4 }}>
-              Parana Logística · {pedido.pax} PAX · {pedido.dias} días · {pedido.solicitado_por}
+              PL Offshore · {pedido.pax} PAX · {pedido.dias} días · {pedido.solicitado_por}
               {pedido.fecha_necesaria && (
                 <span style={{ color: "var(--warn)", marginLeft: 8 }}>Nec: {fmtDate(pedido.fecha_necesaria)}</span>
               )}
@@ -992,7 +992,7 @@ function ModalTrackerEditar({ pedido, onClose, onSave, notify }) {
         <div className="mhdr">
           <div>
             <div className="mtitle">📊 Tracker — {pedido.base_buque}</div>
-            <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 4 }}>Parana Logística · {pedido.pax} PAX · {pedido.dias} días · {pedido.solicitado_por}</div>
+            <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 4 }}>PL Offshore · {pedido.pax} PAX · {pedido.dias} días · {pedido.solicitado_por}</div>
           </div>
           <button className="mclose" onClick={onClose}>✕</button>
         </div>
@@ -1225,7 +1225,7 @@ function PageInbox({ notify, onNeedRefresh }) {
                   <div className="flex-gap mb8">
                     <span className="text-mono" style={{ fontSize: 11, color: "var(--accent)" }}>{fmtDate(p.fecha_pedido)}</span>
                     <span className="badge b-blue">Víveres</span>
-                    <span style={{ marginLeft: "auto", fontSize: 10, color: "var(--muted)" }}>Parana Logística</span>
+                    <span style={{ marginLeft: "auto", fontSize: 10, color: "var(--muted)" }}>PL Offshore</span>
                   </div>
                   <div className="req-title">🚢 {p.base_buque} — {p.pax} PAX × {p.dias} días</div>
                   <div className="req-meta">
@@ -1275,7 +1275,7 @@ function PageHistorial({ onNuevo, notify }) {
           const s = STATUS_PEDIDO[p.status] || { label: p.status, color: "b-gray" };
           const cnt = (p.viveres_pedido_items || []).filter(it => it.cantidad_pedida > 0).length;
           return <div key={p.id} className="req-row" onClick={() => setSelected(p)}>
-            <div className="flex-between mb8"><div className="flex-gap"><span className="text-mono" style={{ fontSize: 11, color: "var(--accent)" }}>{fmtDate(p.fecha_pedido)}</span><span className={`badge ${s.color}`}>{s.label}</span></div><span style={{ fontSize: 10, color: "var(--muted)" }}>Parana Logística</span></div>
+            <div className="flex-between mb8"><div className="flex-gap"><span className="text-mono" style={{ fontSize: 11, color: "var(--accent)" }}>{fmtDate(p.fecha_pedido)}</span><span className={`badge ${s.color}`}>{s.label}</span></div><span style={{ fontSize: 10, color: "var(--muted)" }}>PL Offshore</span></div>
             <div className="req-title">{p.base_buque} — {p.pax} PAX × {p.dias} días</div>
             <div className="req-meta"><span>{p.solicitado_por}</span><span>·</span><span>{cnt} ítems</span>{p.fecha_necesaria && <><span>·</span><span style={{ color: "var(--warn)" }}>Nec: {fmtDate(p.fecha_necesaria)}</span></>}</div>
           </div>;
@@ -1642,15 +1642,15 @@ function LoginPage() {
             </div>
             <div className="login-left-divider" />
             <div className="login-left-company">
-              <img src="/PL.png" alt="Parana Logística" className="login-left-company-logo" />
-              <div className="login-left-company-name">Parana Logística | Víveres</div>
+              <img src="/PL.png" alt="PL Offshore" className="login-left-company-logo" />
+              <div className="login-left-company-name">PL Offshore | Víveres</div>
             </div>
             <div className="login-left-line" />
             <div className="login-left-sub">We Find the Way, or We Make One.</div>
           </div>
           <div className="login-right">
             <div className="login-card">
-              <div className="login-card-eyebrow">Parana Logística | Víveres</div>
+              <div className="login-card-eyebrow">PL Offshore | Víveres</div>
               <div className="login-card-title">Acceso al portal</div>
               <div className="login-card-sub">Solo personal autorizado</div>
               {error && <div className="login-error">{error}</div>}
@@ -1665,7 +1665,7 @@ function LoginPage() {
               <button className="login-btn" onClick={handleLogin} disabled={loading || !email || !pass}>
                 {loading ? "Ingresando..." : "Ingresar →"}
               </button>
-              <div className="login-footer">Parana Logística · Acceso restringido</div>
+              <div className="login-footer">PL Offshore · Acceso restringido</div>
               <div className="login-back" onClick={() => window.location.href = PORTAL_URL}>← Volver a Grupo PL</div>
             </div>
           </div>
@@ -2074,8 +2074,8 @@ function ViveresApp() {
         <nav className="sidebar">
           <div className="sidebar-header">
             <div className="sidebar-logo-wrap">
-              <img src="/PL.png" alt="Parana Logística" className="sidebar-logo-img" />
-              <div><div className="sidebar-logo-main">Víveres</div><div className="sidebar-logo-sub">Parana Logística</div></div>
+              <img src="/PL.png" alt="PL Offshore" className="sidebar-logo-img" />
+              <div><div className="sidebar-logo-main">Víveres</div><div className="sidebar-logo-sub">PL Offshore</div></div>
             </div>
           </div>
           <div className="nav-section">Gestión</div>
